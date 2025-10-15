@@ -12,4 +12,5 @@ pywin32>=304; sys_platform == "win32"
 # Linux specific dependencies
 pycups>=2.0.1; sys_platform == "linux"
 
-# Platform independent dependencies
+# Build tools
+pyinstaller>=6.0.0
