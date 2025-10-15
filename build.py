@@ -251,36 +251,64 @@ def copy_resources():
     print(f"[OK] 已创建必要的目录结构")
 
 
+def wait_for_exit():
+    """等待用户按键退出"""
+    try:
+        input("\n按回车键退出...")
+    except:
+        pass
+
+
 def main():
     """主函数"""
-    print("\n斑马打印机MQTT服务 - 打包工具\n")
+    try:
+        print("\n斑马打印机MQTT服务 - 打包工具\n")
+        
+        # 安装依赖
+        if not install_dependencies():
+            print("\n[ERROR] 依赖安装失败")
+            wait_for_exit()
+            return 1
+        
+        # 构建可执行文件
+        if not build_executable():
+            print("\n[ERROR] 打包失败，请检查上方错误信息")
+            wait_for_exit()
+            return 1
+        
+        # 复制资源文件
+        copy_resources()
+        
+        # 创建README
+        create_readme()
+        
+        system, machine = get_platform_info()
+        print("\n" + "=" * 70)
+        print("打包完成！")
+        print("=" * 70)
+        print(f"\n可执行文件位置: dist/{system}-{machine}/")
+        print("\n提示:")
+        print("  1. 测试可执行文件是否正常工作")
+        print("  2. 配置 config/printer_config.json")
+        print("  3. 运行程序并发送测试消息")
+        print("\n" + "=" * 70)
+        
+        # 成功时也等待，让用户看到完成信息
+        wait_for_exit()
+        return 0
     
-    # 安装依赖
-    if not install_dependencies():
+    except KeyboardInterrupt:
+        print("\n\n[INFO] 用户取消打包")
+        wait_for_exit()
         return 1
-    
-    # 构建可执行文件
-    if not build_executable():
+    except Exception as e:
+        print("\n" + "=" * 70)
+        print(f"[ERROR] 未预期的错误: {e}")
+        print("=" * 70)
+        import traceback
+        traceback.print_exc()
+        wait_for_exit()
         return 1
-    
-    # 复制资源文件
-    copy_resources()
-    
-    # 创建README
-    create_readme()
-    
-    system, machine = get_platform_info()
-    print("\n" + "=" * 70)
-    print("打包完成！")
-    print("=" * 70)
-    print(f"\n可执行文件位置: dist/{system}-{machine}/")
-    print("\n提示:")
-    print("  1. 测试可执行文件是否正常工作")
-    print("  2. 配置 config/printer_config.json")
-    print("  3. 运行程序并发送测试消息")
-    print("\n" + "=" * 70)
-    
-    return 0
 
 
 if __name__ == '__main__':

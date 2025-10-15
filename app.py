@@ -34,50 +34,79 @@ def print_banner():
     print()
 
 
+def wait_for_user_exit():
+    """等待用户按键退出"""
+    try:
+        input("\n按回车键退出...")
+    except:
+        pass
+
+
 def main():
     """主函数"""
-    # 打印横幅
-    print_banner()
-    
-    # 检查配置文件是否存在
-    config_file = 'config/printer_config.json'
-    if not os.path.exists(config_file):
-        print(f"配置文件不存在，正在创建默认配置...")
-        create_default_config(config_file)
-        print()
-    
-    # 加载配置
-    config_manager = ConfigManager(config_file)
-    config = config_manager.load()
-    
-    if not config:
-        print("配置加载失败，退出")
-        return 1
-    
-    # 获取MQTT和打印机配置
-    mqtt_config = config_manager.get_mqtt_config()
-    printer_config = config_manager.get_printer_config()
-    
-    # 创建并启动MQTT客户端
     try:
-        client = LabelPrintMQTT(
-            broker_host=mqtt_config.get('host', '127.0.0.1'),
-            broker_port=mqtt_config.get('port', 1883),
-            topic=mqtt_config.get('topic', 'zebra/print'),
-            username=mqtt_config.get('username'),
-            password=mqtt_config.get('password'),
-            printer_config=printer_config
-        )
+        # 打印横幅
+        print_banner()
         
-        client.start()
+        # 检查配置文件是否存在
+        config_file = 'config/printer_config.json'
+        if not os.path.exists(config_file):
+            print(f"配置文件不存在，正在创建默认配置...")
+            create_default_config(config_file)
+            print()
         
-    except KeyboardInterrupt:
-        print("\n\n服务已停止")
-        return 0
+        # 加载配置
+        config_manager = ConfigManager(config_file)
+        config = config_manager.load()
+        
+        if not config:
+            print("\n" + "=" * 70)
+            print("错误：配置加载失败")
+            print("=" * 70)
+            wait_for_user_exit()
+            return 1
+        
+        # 获取MQTT和打印机配置
+        mqtt_config = config_manager.get_mqtt_config()
+        printer_config = config_manager.get_printer_config()
+        
+        # 创建并启动MQTT客户端
+        try:
+            client = LabelPrintMQTT(
+                broker_host=mqtt_config.get('host', '127.0.0.1'),
+                broker_port=mqtt_config.get('port', 1883),
+                topic=mqtt_config.get('topic', 'zebra/print'),
+                username=mqtt_config.get('username'),
+                password=mqtt_config.get('password'),
+                printer_config=printer_config
+            )
+            
+            client.start()
+            
+        except KeyboardInterrupt:
+            print("\n\n服务已停止")
+            return 0
+        except Exception as e:
+            print("\n" + "=" * 70)
+            print(f"错误: {e}")
+            print("=" * 70)
+            import traceback
+            traceback.print_exc()
+            print("\n提示：")
+            print("  1. 检查MQTT服务器是否运行")
+            print("  2. 检查打印机配置是否正确")
+            print("  3. 查看上方的详细错误信息")
+            wait_for_user_exit()
+            return 1
+    
     except Exception as e:
-        print(f"\n错误: {e}")
+        # 捕获所有未预期的异常
+        print("\n" + "=" * 70)
+        print(f"严重错误: {e}")
+        print("=" * 70)
         import traceback
         traceback.print_exc()
+        wait_for_user_exit()
         return 1
 
 

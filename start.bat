@@ -30,8 +30,9 @@ echo.
 echo 启动服务...
 echo.
 
-REM 启动主程序
+REM 启动主程序（app.py内部已包含暂停功能）
 python app.py
 
-pause
+REM 如果程序正常退出（Ctrl+C），不需要额外暂停
+REM 如果程序异常退出，app.py内部会暂停等待用户
 
