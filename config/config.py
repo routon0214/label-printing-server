@@ -55,13 +55,19 @@ class ConfigManager:
         return self.config.get('mqtt', {})
     
     def get_printer_config(self):
-        """获取打印机配置"""
+        """获取打印机配置（单打印机，兼容旧版）"""
         if self.config is None:
             self.load()
         return self.config.get('printer', {})
+    
+    def get_printers_config(self):
+        """获取多打印机配置（新版）"""
+        if self.config is None:
+            self.load()
+        return self.config.get('printers', [])
 
 
-def load_config(config_file='config/printer_config.json'):
+def load_config(config_file='../config/printer_config.json'):
     """
     加载配置文件
     

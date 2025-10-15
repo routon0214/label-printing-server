@@ -97,7 +97,10 @@ def main():
         
         # 获取MQTT和打印机配置
         mqtt_config = config_manager.get_mqtt_config()
-        printer_config = config_manager.get_printer_config()
+        
+        # 支持新旧两种配置格式
+        printers_config = config.get('printers')  # 新格式：多打印机
+        printer_config = config.get('printer')     # 旧格式：单打印机
         
         # 创建并启动MQTT客户端
         try:
@@ -107,13 +110,15 @@ def main():
                 topic=mqtt_config.get('topic', 'zebra/print'),
                 username=mqtt_config.get('username'),
                 password=mqtt_config.get('password'),
-                printer_config=printer_config
+                printer_config=printer_config,      # 兼容旧版
+                printers_config=printers_config     # 新版多打印机
             )
             
             client.start()
             
         except KeyboardInterrupt:
             print("\n\n服务已停止")
+            # Ctrl+C时不等待，直接返回
             return 0
         except Exception as e:
             print("\n" + "=" * 70)
@@ -142,10 +147,22 @@ def main():
 if __name__ == "__main__":
     # 在最外层添加异常捕获，确保导入错误等也能被捕获
     try:
-        sys.exit(main())
-    except SystemExit:
-        # 正常退出，不拦截
+        exit_code = main()
+        # 如果是正常退出（返回0），也等待确认
+        if exit_code == 0:
+            print("\n程序正常退出")
+        wait_for_user_exit()
+        sys.exit(exit_code if exit_code else 0)
+    except SystemExit as e:
+        # SystemExit也要等待
+        if e.code != 0:
+            print(f"\n程序退出，代码: {e.code}")
+            wait_for_user_exit()
         raise
+    except KeyboardInterrupt:
+        print("\n\n用户中断程序")
+        wait_for_user_exit()
+        sys.exit(0)
     except Exception as e:
         # 捕获所有其他异常（包括导入错误等）
         print("\n" + "=" * 70)
@@ -154,9 +171,10 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         print("\n可能的原因:")
-        print("  1. 缺少必要的Python库（运行: pip install -r requirements.txt）")
-        print("  2. Python版本不兼容（需要Python 3.7+）")
+        print("  1. 缺少必要的Python库")
+        print("  2. 配置文件错误")
         print("  3. 文件权限问题")
+        print("  4. MQTT服务器连接问题")
         wait_for_user_exit()
         sys.exit(1)
 

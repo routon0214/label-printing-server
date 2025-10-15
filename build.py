@@ -37,7 +37,7 @@ def get_platform_info():
 
 def clean_build_dirs():
     """清理构建目录"""
-    dirs_to_clean = ['build', 'dist']
+    dirs_to_clean = ['build', 'dist/']
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
             print(f"清理目录: {dir_name}")

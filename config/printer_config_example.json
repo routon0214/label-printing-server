@@ -7,40 +7,60 @@
     "password": null,
     "_comment": "MQTT服务器配置"
   },
-  "printer": {
-    "name": "ZT411",
-    "ip": null,
-    "port": 9100,
-    "device": null,
-    "_comment": {
-      "name": "打印机名称 (Windows/CUPS) - 支持模糊搜索，如 'ZT411', 'zebra', 'ZDesigner'",
-      "ip": "打印机IP地址（网络打印，所有平台通用）- 例如 '192.168.1.100'",
-      "port": "网络打印端口（默认9100）",
-      "device": "设备路径 (Linux USB，如 '/dev/usb/lp0')",
-      "说明": "配置其中一项即可，优先级: ip > name > device > 自动检测"
+  "printers": [
+    {
+      "name": "ZT411",
+      "types": ["label"],
+      "ip": null,
+      "port": 9100,
+      "device": null,
+      "default": true,
+      "_comment": "斑马标签打印机 - 处理ZPL标签"
+    },
+    {
+      "name": "HP LaserJet",
+      "types": ["pdf"],
+      "ip": null,
+      "port": 9100,
+      "device": null,
+      "_comment": "激光打印机 - 处理PDF文档"
+    },
+    {
+      "name": "热敏打印机",
+      "types": ["receipt", "escpos"],
+      "ip": "192.168.1.100",
+      "port": 9100,
+      "device": null,
+      "_comment": "ESC/POS热敏打印机 - 处理小票"
     }
+  ],
+  "_comment": {
+    "printers": "打印机配置数组",
+    "name": "打印机名称（支持模糊搜索）",
+    "types": "支持的打印类型: ['label', 'pdf', 'receipt'] 或 ['*'] 表示全部",
+    "ip": "网络打印机IP地址",
+    "port": "网络打印端口（默认9100）",
+    "device": "Linux设备路径（如/dev/usb/lp0）",
+    "default": "是否为默认打印机（找不到匹配时使用）"
   },
   "_examples": {
-    "Windows USB打印": {
+    "单打印机配置（兼容旧版）": {
       "printer": {
-        "name": "ZT411"
+        "name": "ZT411",
+        "ip": null
       }
     },
-    "网络打印（所有平台）": {
-      "printer": {
-        "ip": "192.168.1.100",
-        "port": 9100
-      }
+    "多打印机配置（推荐）": {
+      "printers": [
+        {"name": "ZT411", "types": ["label"]},
+        {"name": "HP", "types": ["pdf"]},
+        {"name": "热敏", "types": ["receipt"]}
+      ]
     },
-    "Linux CUPS": {
-      "printer": {
-        "name": "Zebra-ZT411"
-      }
-    },
-    "Linux USB设备": {
-      "printer": {
-        "device": "/dev/usb/lp0"
-      }
+    "通用打印机": {
+      "printers": [
+        {"name": "Universal", "types": ["*"], "default": true}
+      ]
     }
   }
 }

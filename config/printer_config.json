@@ -6,9 +6,31 @@
     "username": null,
     "password": null
   },
-  "printer": {
-    "name": "ZT411",
-    "comment": "打印机名称，null表示自动查找ZT411"
-  }
+  "printers": [
+    {
+      "name": "ZT411",
+      "types": ["label"],
+      "ip": null,
+      "port": 9100,
+      "device": null,
+      "default": true,
+      "_comment": "斑马标签打印机 - 处理ZPL标签"
+    },
+    {
+      "name": "KONICA",
+      "types": ["pdf"],
+      "ip": null,
+      "port": 9100,
+      "device": null,
+      "_comment": "激光打印机 - 处理PDF文档"
+    },
+    {
+      "name": "热敏打印机",
+      "types": ["receipt", "escpos"],
+      "ip": "192.168.1.100",
+      "port": 9100,
+      "device": null,
+      "_comment": "ESC/POS热敏打印机 - 处理小票"
+    }
+  ]
 }
-
