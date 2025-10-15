@@ -72,7 +72,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=True,  # 保持控制台窗口打开
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -80,17 +80,4 @@ exe = EXE(
     entitlements_file=None,
     icon=None,
 )
-
-# 对于Linux，创建可执行文件
-if sys.platform == 'linux':
-    coll = COLLECT(
-        exe,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
-        strip=False,
-        upx=True,
-        upx_exclude=[],
-        name='label-printing-server',
-    )
 

@@ -16,6 +16,17 @@ import sys
 import os
 import platform
 
+# Windows 控制台编码修复
+if sys.platform == 'win32':
+    import io
+    try:
+        if sys.stdout.encoding != 'utf-8':
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if sys.stderr.encoding != 'utf-8':
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except:
+        pass
+
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -26,7 +37,7 @@ from core import LabelPrintMQTT
 def print_banner():
     """打印服务启动横幅"""
     print("=" * 70)
-    print(" " * 15 + "斑马打印机MQTT标签打印服务")
+    print(" " * 15 + "打印机MQTT标签打印服务")
     print("=" * 70)
     print(f"系统: {platform.system()} {platform.machine()}")
     print(f"Python: {sys.version.split()[0]}")
@@ -42,11 +53,29 @@ def wait_for_user_exit():
         pass
 
 
+def ensure_directories():
+    """确保所有必要的目录存在"""
+    directories = [
+        'config',
+        'logs',
+        'failed_labels'
+    ]
+    
+    for directory in directories:
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except Exception as e:
+            print(f"警告：无法创建目录 {directory}: {e}")
+
+
 def main():
     """主函数"""
     try:
         # 打印横幅
         print_banner()
+        
+        # 确保必要的目录存在
+        ensure_directories()
         
         # 检查配置文件是否存在
         config_file = 'config/printer_config.json'
@@ -111,5 +140,23 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # 在最外层添加异常捕获，确保导入错误等也能被捕获
+    try:
+        sys.exit(main())
+    except SystemExit:
+        # 正常退出，不拦截
+        raise
+    except Exception as e:
+        # 捕获所有其他异常（包括导入错误等）
+        print("\n" + "=" * 70)
+        print(f"启动失败: {e}")
+        print("=" * 70)
+        import traceback
+        traceback.print_exc()
+        print("\n可能的原因:")
+        print("  1. 缺少必要的Python库（运行: pip install -r requirements.txt）")
+        print("  2. Python版本不兼容（需要Python 3.7+）")
+        print("  3. 文件权限问题")
+        wait_for_user_exit()
+        sys.exit(1)
 

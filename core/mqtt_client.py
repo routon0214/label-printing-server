@@ -77,11 +77,16 @@ class LabelPrintMQTT:
                 print(f"{'='*60}\n")
             else:
                 # 保存失败的ZPL到文件
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"failed_labels/failed_label_{timestamp}.zpl"
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(zpl_code)
-                print(f"ZPL已保存到: {filename}")
+                try:
+                    import os
+                    os.makedirs('failed_labels', exist_ok=True)
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"failed_labels/failed_label_{timestamp}.zpl"
+                    with open(filename, 'w', encoding='utf-8') as f:
+                        f.write(zpl_code)
+                    print(f"ZPL已保存到: {filename}")
+                except Exception as save_error:
+                    print(f"警告：无法保存失败的ZPL: {save_error}")
                 print(f"{'='*60}\n")
                 
         except json.JSONDecodeError as e:

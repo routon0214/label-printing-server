@@ -72,13 +72,38 @@ def build_executable():
     # 清理旧的构建文件
     clean_build_dirs()
     
-    # 构建命令
+    # 构建命令 - 单文件模式
     cmd = [
         'pyinstaller',
         '--clean',
         '--noconfirm',
-        'app.spec'
+        '--onefile',  # 打包成单个文件
+        '--console',  # 显示控制台
+        '--name=label-printing-server',
+        # 使用collect-all收集整个包及其所有依赖
+        '--collect-all=paho',  # 收集paho的所有内容
+        '--collect-all=PIL',   # 收集PIL的所有内容
+        '--copy-metadata=paho-mqtt',  # 复制包的元数据
+        # 显式包含关键模块
+        '--hidden-import=paho.mqtt.client',
+        '--hidden-import=paho.mqtt.publish',
+        '--hidden-import=paho.mqtt.subscribe',
+        '--hidden-import=PIL.Image',
+        '--hidden-import=PIL.ImageDraw',
+        '--hidden-import=PIL.ImageFont',
+        # 包含项目自己的模块
+        '--paths=.',  # 添加当前目录到搜索路径
+        'app.py'
     ]
+    
+    # Windows特定的隐藏导入
+    if system == 'Windows':
+        cmd.extend([
+            '--hidden-import=win32print',
+            '--hidden-import=win32ui',
+            '--hidden-import=win32con',
+            '--hidden-import=pywintypes',
+        ])
     
     print("执行打包命令:")
     print(" ".join(cmd))
