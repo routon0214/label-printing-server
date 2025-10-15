@@ -37,8 +37,11 @@ class LabelPrintMQTT:
         self.password = password
         
         # 打印机映射表 {print_type: printer_instance}
-        self.printer_map = {}
-        self.default_printer = None
+        self.printer_map = {}  # 专用打印机映射
+        self.fallback_printer_config = None  # 通用打印机配置（types: ["*"]）
+        self.fallback_printers = {}  # 通用打印机实例缓存
+        # 打印机配置信息（用于启动显示）
+        self.printer_info_list = []
         
         # 如果有多打印机配置（新版）
         if printers_config and isinstance(printers_config, list):
@@ -78,48 +81,119 @@ class LabelPrintMQTT:
             
             print(f"  配置打印机: {name} - 类型: {types}")
             
+            # 收集支持的格式
+            supported_formats = []
+            
             # 为每种类型创建对应的打印机实例
+            receipt_configured = False  # 标记是否已配置receipt打印机，避免重复
             for print_type in types:
                 if print_type == '*':
-                    # 通用打印机，支持所有类型
-                    print(f"    ✓ {name} 设置为通用打印机")
-                    self._add_printer_for_all_types(printer_cfg)
+                    # 通用打印机，作为备选打印机（只有在找不到专用打印机时才使用）
+                    print(f"    ✓ {name} 设置为通用打印机（备选）")
+                    self.fallback_printer_config = printer_cfg
+                    supported_formats = ['label(ZPL)', 'pdf', 'receipt(ESC/POS)']
                     break  # 通配符不需要继续处理其他类型
                 elif print_type == 'label':
-                    self.printer_map['label'] = self._create_zebra_printer(printer_cfg)
-                    print(f"    ✓ 标签打印 → {name}")
+                    # 只有当该类型还没有专用打印机时才设置
+                    if 'label' not in self.printer_map:
+                        self.printer_map['label'] = self._create_zebra_printer(printer_cfg)
+                        print(f"    ✓ 标签打印（专用） → {name}")
+                        supported_formats.append('label(ZPL)')
+                    else:
+                        print(f"    ⚠ 标签打印机已存在，跳过 {name}")
                 elif print_type == 'pdf':
-                    self.printer_map['pdf'] = self._create_pdf_printer(printer_cfg)
-                    print(f"    ✓ PDF打印 → {name}")
+                    if 'pdf' not in self.printer_map:
+                        self.printer_map['pdf'] = self._create_pdf_printer(printer_cfg)
+                        print(f"    ✓ PDF打印（专用） → {name}")
+                        supported_formats.append('pdf')
+                    else:
+                        print(f"    ⚠ PDF打印机已存在，跳过 {name}")
                 elif print_type in ['receipt', 'escpos']:
-                    self.printer_map['receipt'] = self._create_escpos_printer(printer_cfg)
-                    self.printer_map['escpos'] = self.printer_map['receipt']
-                    print(f"    ✓ 小票打印 → {name}")
+                    if not receipt_configured and 'receipt' not in self.printer_map:
+                        self.printer_map['receipt'] = self._create_escpos_printer(printer_cfg)
+                        self.printer_map['escpos'] = self.printer_map['receipt']
+                        print(f"    ✓ 小票打印（专用） → {name}")
+                        supported_formats.append('receipt(ESC/POS)')
+                        receipt_configured = True
+                    else:
+                        print(f"    ⚠ 小票打印机已存在，跳过 {name}")
                 else:
                     print(f"    ⚠ 未知的打印类型: {print_type}")
             
-            # 设置默认打印机
-            if is_default:
-                self.default_printer = printer_cfg
-                print(f"    ⭐ {name} 设置为默认打印机")
+            # 保存打印机信息
+            printer_info = {
+                'name': name,
+                'formats': supported_formats,
+                'is_fallback': '*' in types,
+                'config': printer_cfg
+            }
+            self.printer_info_list.append(printer_info)
+    
+    def _get_printer(self, print_type):
+        """
+        获取指定类型的打印机
+        优先返回专用打印机，找不到则返回通用打印机
+        
+        Args:
+            print_type: 打印类型 ('label', 'pdf', 'receipt', 'escpos')
+            
+        Returns:
+            打印机实例，如果没有返回 None
+        """
+        # 1. 优先查找专用打印机
+        if print_type in self.printer_map:
+            return self.printer_map[print_type]
+        
+        # 2. 如果没有专用打印机，使用备选打印机
+        if self.fallback_printer_config:
+            # 检查是否已经创建过该类型的备选打印机实例
+            if print_type not in self.fallback_printers:
+                # 创建备选打印机实例
+                if print_type == 'label':
+                    self.fallback_printers[print_type] = self._create_zebra_printer(self.fallback_printer_config)
+                elif print_type == 'pdf':
+                    self.fallback_printers[print_type] = self._create_pdf_printer(self.fallback_printer_config)
+                elif print_type in ['receipt', 'escpos']:
+                    self.fallback_printers[print_type] = self._create_escpos_printer(self.fallback_printer_config)
+                else:
+                    return None
+            
+            return self.fallback_printers.get(print_type)
+        
+        # 3. 没有找到任何打印机
+        return None
     
     def _init_single_printer(self, printer_config):
         """初始化单打印机配置（兼容旧版）"""
         print("使用单打印机配置（兼容模式）")
-        self._add_printer_for_all_types(printer_config)
+        # 旧版单打印机配置作为备选打印机
+        self.fallback_printer_config = printer_config
+        
+        # 添加打印机信息
+        name = printer_config.get('name', '通用打印机')
+        printer_info = {
+            'name': name,
+            'formats': ['label(ZPL)', 'pdf', 'receipt(ESC/POS)'],
+            'is_fallback': True,
+            'config': printer_config
+        }
+        self.printer_info_list.append(printer_info)
     
     def _init_default_printers(self):
         """初始化默认打印机（自动检测）"""
         print("使用默认配置，自动检测打印机")
         default_config = {'name': None, 'ip': None, 'port': 9100, 'device': None}
-        self._add_printer_for_all_types(default_config)
-    
-    def _add_printer_for_all_types(self, printer_cfg):
-        """为所有类型添加打印机"""
-        self.printer_map['label'] = self._create_zebra_printer(printer_cfg)
-        self.printer_map['pdf'] = self._create_pdf_printer(printer_cfg)
-        self.printer_map['receipt'] = self._create_escpos_printer(printer_cfg)
-        self.printer_map['escpos'] = self.printer_map['receipt']
+        # 作为备选打印机
+        self.fallback_printer_config = default_config
+        
+        # 添加打印机信息
+        printer_info = {
+            'name': '自动检测打印机',
+            'formats': ['label(ZPL)', 'pdf', 'receipt(ESC/POS)'],
+            'is_fallback': True,
+            'config': default_config
+        }
+        self.printer_info_list.append(printer_info)
     
     def _create_zebra_printer(self, cfg):
         """创建ZPL打印机实例"""
@@ -171,12 +245,18 @@ class LabelPrintMQTT:
                 # PDF文档打印
                 print("类型: PDF文档打印")
                 
-                # 获取对应的打印机
-                pdf_printer = self.printer_map.get('pdf')
+                # 获取对应的打印机（优先专用，找不到用通用）
+                pdf_printer = self._get_printer('pdf')
                 if not pdf_printer:
                     print("✗ 错误：未配置PDF打印机")
                     success = False
                 else:
+                    # 判断是使用专用还是通用打印机
+                    if 'pdf' in self.printer_map:
+                        print("  使用: PDF专用打印机")
+                    else:
+                        print("  使用: 通用打印机（备选）")
+                    
                     pdf_data = data.get('pdf_data') or data.get('pdf_file')
                     printer_name = data.get('printer')
                     
@@ -197,12 +277,18 @@ class LabelPrintMQTT:
                 # ESC/POS小票打印
                 print("类型: ESC/POS小票打印")
                 
-                # 获取对应的打印机
-                receipt_printer = self.printer_map.get('receipt')
+                # 获取对应的打印机（优先专用，找不到用通用）
+                receipt_printer = self._get_printer('receipt')
                 if not receipt_printer:
                     print("✗ 错误：未配置ESC/POS打印机")
                     success = False
                 else:
+                    # 判断是使用专用还是通用打印机
+                    if 'receipt' in self.printer_map:
+                        print("  使用: ESC/POS专用打印机")
+                    else:
+                        print("  使用: 通用打印机（备选）")
+                    
                     success = receipt_printer.print_receipt(data)
                 
                 # 打印结果
@@ -216,14 +302,28 @@ class LabelPrintMQTT:
                 # 标签打印（默认）
                 print("类型: ZPL标签打印")
                 
-                # 获取对应的打印机
-                label_printer = self.printer_map.get('label')
+                # 获取对应的打印机（优先专用，找不到用通用）
+                label_printer = self._get_printer('label')
                 if not label_printer:
                     print("✗ 错误：未配置标签打印机")
                     success = False
                 else:
-                    # 生成ZPL代码
-                    zpl_code = self.zpl_generator.generate_label_zpl(data)
+                    # 判断是使用专用还是通用打印机
+                    if 'label' in self.printer_map:
+                        print("  使用: 标签专用打印机")
+                    else:
+                        print("  使用: 通用打印机（备选）")
+                    
+                    # 获取ZPL代码：支持直接发送或自动生成
+                    if 'zpl_code' in data:
+                        # 直接使用提供的ZPL代码
+                        zpl_code = data.get('zpl_code')
+                        print("  ZPL来源: 直接提供")
+                    else:
+                        # 根据数据自动生成ZPL代码
+                        zpl_code = self.zpl_generator.generate_label_zpl(data)
+                        print("  ZPL来源: 自动生成")
+                    
                     # 打印
                     success = label_printer.print_label(zpl_code)
                 
@@ -262,26 +362,57 @@ class LabelPrintMQTT:
         try:
             import paho.mqtt.client as mqtt
             
-            print("="*60)
-            print("打印机MQTT服务")
-            print("="*60)
+            print("="*70)
+            print(" " * 20 + "打印机MQTT服务")
+            print("="*70)
             print(f"MQTT服务器: {self.broker_host}:{self.broker_port}")
             print(f"订阅主题: {self.topic}")
+            print("-"*70)
             
-            # 显示已配置的打印机
-            if self.printer_map:
+            # 显示已配置的打印机信息
+            if self.printer_info_list:
                 print("已配置的打印机:")
-                for print_type, printer in self.printer_map.items():
-                    if print_type != 'escpos':  # 跳过 escpos 别名
-                        printer_info = "自动检测"
-                        if hasattr(printer, 'printer_name') and printer.printer_name:
-                            printer_info = printer.printer_name
-                        elif hasattr(printer, 'printer_ip') and printer.printer_ip:
-                            printer_info = printer.printer_ip
-                        print(f"  {print_type}: {printer_info}")
+                for idx, printer_info in enumerate(self.printer_info_list, 1):
+                    name = printer_info['name']
+                    formats = printer_info['formats']
+                    is_fallback = printer_info.get('is_fallback', False)
+                    
+                    # 获取实际的打印机名称或IP
+                    config = printer_info['config']
+                    actual_name = "自动检测"
+                    
+                    # 尝试从第一个格式的打印机实例获取实际名称
+                    if formats and not is_fallback:
+                        first_format = formats[0].split('(')[0]  # 提取格式名，去掉括号
+                        if first_format == 'label':
+                            printer_instance = self.printer_map.get('label')
+                        elif first_format == 'pdf':
+                            printer_instance = self.printer_map.get('pdf')
+                        elif first_format == 'receipt':
+                            printer_instance = self.printer_map.get('receipt')
+                        else:
+                            printer_instance = None
+                        
+                        if printer_instance:
+                            if hasattr(printer_instance, 'printer_name') and printer_instance.printer_name:
+                                actual_name = printer_instance.printer_name
+                            elif hasattr(printer_instance, 'printer_ip') and printer_instance.printer_ip:
+                                actual_name = f"网络打印机 {printer_instance.printer_ip}"
+                    
+                    # 显示打印机信息
+                    type_mark = " 🔄 备选" if is_fallback else " ⭐ 专用"
+                    print(f"\n  [{idx}] {name}{type_mark}")
+                    print(f"      设备: {actual_name}")
+                    print(f"      支持格式: {', '.join(formats)}")
+                    if is_fallback:
+                        print(f"      说明: 当找不到专用打印机时使用")
+            elif self.printer_map:
+                print("已配置的打印机: 通用打印机（兼容模式）")
+                print("  支持格式: label(ZPL), pdf, receipt(ESC/POS)")
             else:
                 print("打印机: 未配置")
-            print("="*60)
+            
+            print("="*70)
             
             # 创建客户端
             self.client = mqtt.Client()

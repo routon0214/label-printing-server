@@ -19,10 +19,41 @@ class PDFPrinter:
         初始化PDF打印机
         
         Args:
-            printer_name: 打印机名称
+            printer_name: 打印机名称（支持模糊匹配）
         """
         self.system = platform.system()
-        self.printer_name = printer_name
+        self.configured_name = printer_name  # 配置的名称（可能是模糊名称）
+        self.printer_name = self._resolve_printer_name(printer_name)  # 实际的系统名称
+    
+    def _resolve_printer_name(self, printer_name):
+        """
+        解析打印机名称，如果是模糊名称则查找实际名称
+        
+        Args:
+            printer_name: 配置的打印机名称
+            
+        Returns:
+            str: 实际的打印机名称
+        """
+        if not printer_name or self.system != 'Windows':
+            return printer_name
+        
+        try:
+            from utils.fuzzy_match import fuzzy_search_printer
+            
+            # 尝试模糊匹配
+            matched_name = fuzzy_search_printer(printer_name)
+            if matched_name:
+                if matched_name != printer_name:
+                    print(f"PDF打印机名称解析: '{printer_name}' → '{matched_name}'")
+                return matched_name
+            else:
+                # 没有找到匹配，返回原名称
+                return printer_name
+                
+        except Exception as e:
+            # 如果模糊匹配失败，返回原名称
+            return printer_name
     
     def print_pdf(self, pdf_data, printer_name=None):
         """
@@ -35,7 +66,11 @@ class PDFPrinter:
         Returns:
             bool: 是否成功
         """
-        printer = printer_name or self.printer_name
+        # 如果传入了打印机名称，也需要解析
+        if printer_name:
+            printer = self._resolve_printer_name(printer_name)
+        else:
+            printer = self.printer_name
         
         print(f"开始处理PDF打印...")
         print(f"目标打印机: {printer or '默认打印机'}")
@@ -127,30 +162,55 @@ class PDFPrinter:
             print(f"打印文件: {pdf_file}")
             
             # 方案1: 使用SumatraPDF静默打印（推荐，最快）
+            # 获取用户目录
+            user_profile = os.environ.get('USERPROFILE', '')
+            
             sumatra_paths = [
                 r"C:\Program Files\SumatraPDF\SumatraPDF.exe",
                 r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
+                os.path.join(user_profile, r"AppData\Local\SumatraPDF\SumatraPDF.exe") if user_profile else None,
+                os.path.join(user_profile, r"AppData\Local\Programs\SumatraPDF\SumatraPDF.exe") if user_profile else None,
             ]
             
-            for sumatra in sumatra_paths:
-                if os.path.exists(sumatra):
-                    print(f"使用SumatraPDF静默打印...")
-                    try:
-                        cmd = [
-                            sumatra,
-                            '-print-to', printer_name,
-                            '-silent',
-                            pdf_file
-                        ]
-                        result = subprocess.run(cmd, capture_output=True, timeout=30)
-                        if result.returncode == 0:
-                            print(f"✓ SumatraPDF静默打印成功: {printer_name}")
-                            return True
-                    except Exception as e:
-                        print(f"SumatraPDF打印失败: {e}")
-                        break
+            # 过滤掉 None 值
+            sumatra_paths = [p for p in sumatra_paths if p]
             
-            # 方案2: 使用Adobe Reader静默打印
+            print(f"正在检查 SumatraPDF 路径...")
+            sumatra_found = None
+            for sumatra in sumatra_paths:
+                print(f"  检查: {sumatra}")
+                if os.path.exists(sumatra):
+                    print(f"  ✓ 找到: {sumatra}")
+                    sumatra_found = sumatra
+                    break
+            
+            if sumatra_found:
+                print(f"使用SumatraPDF打印（显示对话框）: {sumatra_found}")
+                try:
+                    # 使用打印对话框，让用户可以调整设置
+                    cmd = [
+                        sumatra_found,
+                        '-print-dialog',  # 显示打印对话框
+                        pdf_file
+                    ]
+                    print(f"执行命令: {' '.join(cmd)}")
+                    print(f"提示: 将显示打印对话框，请手动确认设置")
+                    
+                    # 启动进程但不等待（因为需要用户交互）
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    
+                    print(f"✓ 已打开打印对话框")
+                    print(f"  目标打印机: {printer_name}")
+                    print(f"  请在对话框中确认设置并打印")
+                    return True
+                    
+                except Exception as e:
+                    print(f"✗ SumatraPDF启动失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    print(f"  尝试其他打印方案...")
+            
+            # 方案2: 使用Adobe Reader打印（显示对话框）
             adobe_paths = [
                 r"C:\Program Files\Adobe\Acrobat DC\Acrobat\Acrobat.exe",
                 r"C:\Program Files (x86)\Adobe\Acrobat Reader DC\Reader\AcroRd32.exe",
@@ -159,34 +219,34 @@ class PDFPrinter:
             
             for adobe in adobe_paths:
                 if os.path.exists(adobe):
-                    print(f"使用Adobe Reader静默打印...")
+                    print(f"使用Adobe Reader打印（显示对话框）...")
                     try:
+                        # 使用 /p 显示打印对话框，而不是 /t 静默打印
                         cmd = [
                             adobe,
-                            '/t',  # 打印
-                            pdf_file,
-                            printer_name
+                            '/p',  # 显示打印对话框
+                            pdf_file
                         ]
                         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        time.sleep(3)  # 等待打印任务提交
-                        print(f"✓ Adobe Reader静默打印已提交: {printer_name}")
+                        print(f"✓ 已打开Adobe Reader打印对话框")
+                        print(f"  请在对话框中选择打印机: {printer_name}")
                         return True
                     except Exception as e:
-                        print(f"Adobe Reader打印失败: {e}")
+                        print(f"Adobe Reader启动失败: {e}")
                         break
             
-            # 方案3: 对于文本文件，使用notepad静默打印
+            # 方案3: 对于文本文件，使用notepad打印（显示对话框）
             if pdf_file.endswith('.txt'):
-                print(f"使用notepad静默打印文本文件...")
+                print(f"使用notepad打印文本文件（显示对话框）...")
                 try:
-                    # notepad /p 可以静默打印到默认打印机
+                    # notepad /p 会显示打印对话框
                     cmd = ['notepad', '/p', pdf_file]
                     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    time.sleep(2)
-                    print(f"✓ 文本文件打印已提交: {printer_name}")
+                    print(f"✓ 已打开notepad打印对话框")
+                    print(f"  请在对话框中选择打印机: {printer_name}")
                     return True
                 except Exception as e:
-                    print(f"notepad打印失败: {e}")
+                    print(f"notepad启动失败: {e}")
             
             # 方案4: 使用win32print直接打印（适合文本和ZPL）
             if pdf_file.endswith(('.txt', '.zpl')):
@@ -195,18 +255,17 @@ class PDFPrinter:
             
             # 方案5: 提示用户安装工具
             print("\n" + "=" * 60)
-            print("⚠ 未找到合适的静默打印工具")
+            print("⚠ 未找到合适的PDF打印工具")
             print("=" * 60)
-            print("\n为了实现PDF静默打印，请安装以下工具之一：")
+            print("\n为了打印PDF文档，请安装以下工具之一：")
             print("\n1. SumatraPDF（推荐）⭐")
-            print("   - 免费、轻量、完全静默")
+            print("   - 免费、轻量、易用")
             print("   - 下载: https://www.sumatrapdfreader.org/")
             print("   - 安装到默认路径即可")
             print("\n2. Adobe Acrobat Reader DC")
             print("   - 官方PDF阅读器")
-            print("   - 支持静默打印模式")
-            print("\n3. Ghostscript + GSPrint")
-            print("   - 命令行PDF打印工具")
+            print("   - 功能完整")
+            print("\n说明: 打印时会显示打印对话框，可以手动调整设置")
             print("=" * 60)
             
             return False

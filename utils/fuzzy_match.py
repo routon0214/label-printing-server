@@ -106,3 +106,43 @@ def find_best_printer(printers, search_pattern):
     
     return None
 
+
+def fuzzy_search_printer(search_pattern):
+    """
+    在系统中搜索打印机（自动获取打印机列表）
+    
+    Args:
+        search_pattern: 搜索模式
+        
+    Returns:
+        str: 最匹配的打印机名称，未找到返回None
+    """
+    if not search_pattern:
+        return None
+    
+    try:
+        import platform
+        system = platform.system()
+        
+        if system == 'Windows':
+            try:
+                import win32print
+                # 获取所有打印机
+                printers = [p[2] for p in win32print.EnumPrinters(2)]
+                return find_best_printer(printers, search_pattern)
+            except ImportError:
+                return None
+        
+        elif system == 'Linux':
+            try:
+                import cups
+                conn = cups.Connection()
+                printers = conn.getPrinters()
+                return find_best_printer(printers, search_pattern)
+            except:
+                return None
+        
+        return None
+        
+    except Exception:
+        return None

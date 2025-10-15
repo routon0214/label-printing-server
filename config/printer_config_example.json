@@ -52,7 +52,7 @@
     },
     "多打印机配置（推荐）": {
       "printers": [
-        {"name": "ZT411", "types": ["label"]},
+        {"name": "ZT411", "types": ["label"], "default": true},
         {"name": "HP", "types": ["pdf"]},
         {"name": "热敏", "types": ["receipt"]}
       ]
@@ -62,6 +62,11 @@
         {"name": "Universal", "types": ["*"], "default": true}
       ]
     }
+  },
+  "_upgrade_notes": {
+    "v2.0": "支持多打印机配置，使用 'printers' 数组替代单个 'printer' 对象",
+    "兼容性": "仍然兼容旧版 'printer' 配置，新旧配置可以同时存在",
+    "types字段": "必须使用数组格式 ['label', 'pdf', 'receipt']，不再支持 'print_type' 单值字段"
   }
 }
 
