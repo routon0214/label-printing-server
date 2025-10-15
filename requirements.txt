@@ -1,0 +1,15 @@
+# Label Printing Server Requirements
+
+# MQTT client for message handling
+paho-mqtt>=1.6.1
+
+# Python Imaging Library for Chinese text support
+Pillow>=9.0.0
+
+# Windows specific dependencies
+pywin32>=304; sys_platform == "win32"
+
+# Linux specific dependencies
+pycups>=2.0.1; sys_platform == "linux"
+
+# Platform independent dependencies
