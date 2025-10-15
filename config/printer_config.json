@@ -25,9 +25,9 @@
       "_comment": "激光打印机 - 处理PDF文档（会自动匹配到 KONICA MINOLTA Universal PCL）"
     },
     {
-      "name": "KONICA",
+      "name": "Deli",
       "types": ["receipt", "escpos"],
-      "ip": "192.168.1.100",
+      "ip": null,
       "port": 9100,
       "device": null,
       "_comment": "ESC/POS热敏打印机 - 处理小票"
