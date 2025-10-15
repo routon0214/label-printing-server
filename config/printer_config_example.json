@@ -1,0 +1,47 @@
+{
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "topic": "zebra/print",
+    "username": null,
+    "password": null,
+    "_comment": "MQTT服务器配置"
+  },
+  "printer": {
+    "name": "ZT411",
+    "ip": null,
+    "port": 9100,
+    "device": null,
+    "_comment": {
+      "name": "打印机名称 (Windows/CUPS) - 支持模糊搜索，如 'ZT411', 'zebra', 'ZDesigner'",
+      "ip": "打印机IP地址（网络打印，所有平台通用）- 例如 '192.168.1.100'",
+      "port": "网络打印端口（默认9100）",
+      "device": "设备路径 (Linux USB，如 '/dev/usb/lp0')",
+      "说明": "配置其中一项即可，优先级: ip > name > device > 自动检测"
+    }
+  },
+  "_examples": {
+    "Windows USB打印": {
+      "printer": {
+        "name": "ZT411"
+      }
+    },
+    "网络打印（所有平台）": {
+      "printer": {
+        "ip": "192.168.1.100",
+        "port": 9100
+      }
+    },
+    "Linux CUPS": {
+      "printer": {
+        "name": "Zebra-ZT411"
+      }
+    },
+    "Linux USB设备": {
+      "printer": {
+        "device": "/dev/usb/lp0"
+      }
+    }
+  }
+}
+
