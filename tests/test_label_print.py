@@ -9,17 +9,20 @@ import json
 import sys
 import os
 
-# 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 添加项目根目录和src目录到路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 
-from config import load_config
+from src.config import ConfigManager
 import paho.mqtt.client as mqtt
 
 
 def get_mqtt_config():
     """从配置文件获取MQTT设置"""
-    config = load_config()
-    mqtt_config = config.get('mqtt', {})
+    config_manager = ConfigManager('config/printer_config.json')
+    config = config_manager.load()
+    mqtt_config = config_manager.get_mqtt_config()
     return {
         'host': mqtt_config.get('host', '127.0.0.1'),
         'port': mqtt_config.get('port', 1883),

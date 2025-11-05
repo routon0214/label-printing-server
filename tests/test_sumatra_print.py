@@ -6,9 +6,11 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 
-from core.pdf_printer import PDFPrinter
+from src.core.pdf_printer import PDFPrinter
 
 
 def test_pdf_print():

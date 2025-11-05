@@ -11,9 +11,11 @@ import json
 import base64
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 
-from config import ConfigManager
+from src.config import ConfigManager
 
 
 def test_label_print(client, topic):

@@ -316,8 +316,8 @@ def main():
     
     # 加载配置
     try:
-        from config import ConfigManager
-        config_manager = ConfigManager('../config/printer_config.json')
+        from src.config import ConfigManager
+        config_manager = ConfigManager('config/printer_config.json')
         config = config_manager.load()
         mqtt_config = config.get('mqtt', {})
         broker_host = mqtt_config.get('host', '127.0.0.1')

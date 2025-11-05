@@ -8,7 +8,9 @@
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
 
 
 def test_print_without_sumatra():
@@ -18,7 +20,7 @@ def test_print_without_sumatra():
     print("="*70)
     
     # 临时重命名 SumatraPDF 路径
-    import core.pdf_printer as pdf_module
+    import src.core.pdf_printer as pdf_module
     
     # 保存原始路径检查函数
     original_exists = os.path.exists
@@ -33,7 +35,7 @@ def test_print_without_sumatra():
     os.path.exists = mock_exists
     
     try:
-        from core.pdf_printer import PDFPrinter
+        from src.core.pdf_printer import PDFPrinter
         import base64
         
         print("\n测试 PDF 打印（无 SumatraPDF）")
@@ -80,7 +82,7 @@ def compare_with_sumatra():
     print("对比测试：SumatraPDF vs 备用方案")
     print("="*70)
     
-    from core.pdf_printer import PDFPrinter
+    from src.core.pdf_printer import PDFPrinter
     import base64
     
     test_file = "tests/test_document_simple.pdf"
