@@ -8,6 +8,7 @@
 import json
 import os
 import platform
+from urllib.parse import urlparse
 
 
 class ConfigManager:
@@ -28,7 +29,7 @@ class ConfigManager:
         加载配置文件
         
         Returns:
-            dict: 配置字典
+            dict: 配置字典1
         """
         self.config = load_config(self.config_file)
         return self.config
@@ -49,10 +50,24 @@ class ConfigManager:
         return self.config.get(key, default)
     
     def get_mqtt_config(self):
-        """获取MQTT配置"""
+        """
+        获取MQTT配置
+        支持URL格式和分离格式，自动解析
+        
+        Returns:
+            dict: MQTT配置字典，包含host、port、topic、username、password等
+        """
         if self.config is None:
             self.load()
-        return self.config.get('mqtt', {})
+        
+        mqtt_config = self.config.get('mqtt', {})
+        
+        # 如果配置中有url字段，优先使用URL格式
+        if 'url' in mqtt_config and mqtt_config['url']:
+            return parse_mqtt_url(mqtt_config['url'], mqtt_config)
+        
+        # 否则使用分离格式（向后兼容）
+        return mqtt_config
     
     def get_printer_config(self):
         """获取打印机配置（单打印机，兼容旧版）"""
@@ -87,6 +102,93 @@ def load_config(config_file='../config/printer_config.json'):
     except Exception as e:
         print(f"加载配置失败: {e}")
         return get_default_config()
+
+
+def parse_mqtt_url(url, extra_config=None):
+    """
+    解析MQTT URL配置
+    
+    支持的URL格式（路径部分会被保留但不会用作topic）：
+    - ws://10.100.10.121:8083/mqtt        # WebSocket，带端口和路径
+    - ws://platform.jajachina.com/mqtt   # WebSocket，域名，默认80端口
+    - tcp://10.100.10.121:1883            # TCP，不带路径
+    - mqtt://127.0.0.1:1883               # 标准MQTT
+    - mqtts://example.com:8883            # SSL MQTT
+    
+    注意：URL中的路径部分（如 /mqtt）会保留在原始URL中，但topic需要单独配置。
+    
+    Args:
+        url: MQTT连接URL
+        extra_config: 额外的配置（如username、password、topic）
+        
+    Returns:
+        dict: 解析后的配置字典
+    """
+    if not url:
+        return {}
+    
+    extra_config = extra_config or {}
+    
+    try:
+        parsed = urlparse(url)
+        
+        # 提取协议
+        protocol = parsed.scheme.lower()
+        
+        # 提取主机和端口
+        host = parsed.hostname or '127.0.0.1'
+        port = parsed.port
+        
+        # 根据协议设置默认端口
+        if port is None:
+            if protocol in ['ws']:
+                port = 80  # WebSocket默认端口（HTTP）
+            elif protocol in ['wss']:
+                port = 443  # WebSocket安全默认端口（HTTPS）
+            elif protocol in ['mqtts', 'ssl']:
+                port = 8883  # SSL MQTT默认端口
+            else:
+                port = 1883  # 标准MQTT默认端口
+        
+        # 提取用户名和密码（如果URL中包含）
+        username = parsed.username or extra_config.get('username')
+        password = parsed.password or extra_config.get('password')
+        
+        # 构建配置字典
+        config = {
+            'host': host,
+            'port': port,
+            'protocol': protocol,
+            'url': url  # 保留原始URL
+        }
+        
+        # topic作为独立配置项，不从URL路径提取
+        # 优先使用配置中的topic，如果没有则使用默认值
+        topic = extra_config.get('topic', 'zebra/print')
+        config['topic'] = topic
+        
+        if username:
+            config['username'] = username
+        if password:
+            config['password'] = password
+        
+        # 合并额外配置（优先级低于URL解析的结果）
+        for key in ['username', 'password', 'topic']:
+            if key in extra_config and key not in config:
+                config[key] = extra_config[key]
+        
+        return config
+        
+    except Exception as e:
+        print(f"警告：解析MQTT URL失败: {e}")
+        print(f"URL: {url}")
+        print("使用默认配置...")
+        return {
+            'host': '127.0.0.1',
+            'port': 1883,
+            'topic': 'zebra/print',
+            'url': url
+        }
 
 
 def get_default_config():
@@ -124,11 +226,20 @@ def create_default_config(config_file='config/printer_config.json'):
     
     config = {
         "mqtt": {
-            "host": "127.0.0.1",
-            "port": 1883,
+            "url": "mqtt://127.0.0.1:1883",
             "topic": "zebra/print",
             "username": None,
-            "password": None
+            "password": None,
+            "_comment": {
+                "url": "MQTT连接URL，格式: protocol://host:port（不包含topic）",
+                "topic": "MQTT订阅主题，独立配置",
+                "示例": [
+                    "mqtt://127.0.0.1:1883",
+                    "ws://10.100.10.121:8083",
+                    "mqtts://example.com:8883"
+                ],
+                "说明": "也可以使用分离格式：host、port、topic分别配置（向后兼容）"
+            }
         },
         "printer": {
             "name": None,

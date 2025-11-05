@@ -1,11 +1,20 @@
 {
   "mqtt": {
-    "host": "127.0.0.1",
-    "port": 1883,
+    "url": "mqtt://127.0.0.1:1883",
     "topic": "zebra/print",
     "username": null,
     "password": null,
-    "_comment": "MQTT服务器配置"
+    "_comment": {
+      "url": "MQTT连接URL，格式: protocol://host:port（不包含topic）",
+      "topic": "MQTT订阅主题，独立配置",
+      "示例URL": [
+        "mqtt://127.0.0.1:1883",
+        "ws://10.100.10.121:8083/mqtt",
+        "tcp://10.100.10.121:1883",
+        "mqtts://example.com:8883"
+      ],
+      "说明": "URL中的路径部分（如 /mqtt）会保留但不会用作topic，topic需要单独配置。也可以使用分离格式：host、port、topic分别配置（向后兼容）"
+    }
   },
   "printers": [
     {

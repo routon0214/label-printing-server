@@ -8,7 +8,7 @@
 import os
 import socket
 import platform
-from utils.fuzzy_match import find_best_printer, fuzzy_match_printer
+from src.utils.fuzzy_match import find_best_printer, fuzzy_match_printer
 
 
 class ZebraPrinter:

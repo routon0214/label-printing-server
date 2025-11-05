@@ -60,12 +60,18 @@ def build_executable():
     """构建可执行文件"""
     system, machine = get_platform_info()
     
+    # 切换到项目根目录
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    os.chdir(project_root)
+    
     print("=" * 70)
     print(f"开始打包应用")
     print("=" * 70)
     print(f"平台: {system}")
     print(f"架构: {machine}")
     print(f"Python: {sys.version.split()[0]}")
+    print(f"项目根目录: {project_root}")
     print("=" * 70)
     print()
     
@@ -80,6 +86,8 @@ def build_executable():
         '--onefile',  # 打包成单个文件
         '--console',  # 显示控制台
         '--name=label-printing-server',
+        '--distpath=dist',  # 指定输出目录为dist
+        '--workpath=build',  # 指定工作目录为build
         # 使用collect-all收集整个包及其所有依赖
         '--collect-all=paho',  # 收集paho的所有内容
         '--collect-all=PIL',   # 收集PIL的所有内容
@@ -93,6 +101,7 @@ def build_executable():
         '--hidden-import=PIL.ImageFont',
         # 包含项目自己的模块
         '--paths=.',  # 添加当前目录到搜索路径
+        '--paths=src',  # 添加src目录到搜索路径
         'app.py'
     ]
     
@@ -115,36 +124,28 @@ def build_executable():
         print("[SUCCESS] 打包成功！")
         print("=" * 70)
         
-        # 创建平台特定的输出目录
-        dist_dir = f"dist/{system}-{machine}"
-        if os.path.exists('dist/label-printing-server'):
-            os.makedirs(dist_dir, exist_ok=True)
-            
-            # 移动文件到平台目录
-            if system == 'windows':
-                exe_name = 'label-printing-server.exe'
-                if os.path.exists(f'dist/{exe_name}'):
-                    shutil.move(f'dist/{exe_name}', f'{dist_dir}/{exe_name}')
-            else:
-                # Linux/Mac 目录结构
-                if os.path.exists('dist/label-printing-server'):
-                    if os.path.exists(dist_dir):
-                        shutil.rmtree(dist_dir)
-                    shutil.move('dist/label-printing-server', dist_dir)
-            
-            print(f"\n输出目录: {dist_dir}")
+        # 检查输出文件
+        exe_name = 'label-printing-server.exe' if system == 'Windows' else 'label-printing-server'
+        exe_path = f'dist/{exe_name}'
+        
+        if os.path.exists(exe_path):
+            print(f"\n✓ 可执行文件已生成: {exe_path}")
+            file_size = os.path.getsize(exe_path) / (1024 * 1024)  # MB
+            print(f"  文件大小: {file_size:.2f} MB")
+        else:
+            print(f"\n⚠ 警告: 未找到预期的输出文件 {exe_path}")
+        
+        print(f"\n输出目录: dist/")
         
         print("\n打包内容:")
         if os.path.exists('dist'):
-            for root, dirs, files in os.walk('dist'):
-                level = root.replace('dist', '').count(os.sep)
-                indent = ' ' * 2 * level
-                print(f"{indent}{os.path.basename(root)}/")
-                subindent = ' ' * 2 * (level + 1)
-                for file in files[:10]:  # 只显示前10个文件
-                    print(f"{subindent}{file}")
-                if len(files) > 10:
-                    print(f"{subindent}... 还有 {len(files) - 10} 个文件")
+            for item in os.listdir('dist'):
+                item_path = os.path.join('dist', item)
+                if os.path.isfile(item_path):
+                    size = os.path.getsize(item_path) / (1024 * 1024)
+                    print(f"  {item} ({size:.2f} MB)")
+                elif os.path.isdir(item_path):
+                    print(f"  {item}/")
         
         return True
         
@@ -158,7 +159,7 @@ def build_executable():
 def create_readme():
     """创建发布说明"""
     system, machine = get_platform_info()
-    dist_dir = f"dist/{system}-{machine}"
+    dist_dir = "dist"
     
     readme_content = f"""# 斑马打印机MQTT标签打印服务
 
@@ -257,16 +258,15 @@ chmod +x label-printing-server
 
 def copy_resources():
     """复制必要的资源文件到dist目录"""
-    system, machine = get_platform_info()
-    dist_dir = f"dist/{system}-{machine}"
+    dist_dir = "dist"
     
     if not os.path.exists(dist_dir):
         return
     
     # 创建必要的目录
     os.makedirs(f"{dist_dir}/config", exist_ok=True)
-    os.makedirs(f"{dist_dir}/logs", exist_ok=True)
-    os.makedirs(f"{dist_dir}/failed_labels", exist_ok=True)
+    os.makedirs(f"{dist_dir}/data/logs", exist_ok=True)
+    os.makedirs(f"{dist_dir}/data/failed_labels", exist_ok=True)
     
     # 复制配置示例文件
     if os.path.exists('config/printer_config_example.json'):
@@ -308,13 +308,15 @@ def main():
         create_readme()
         
         system, machine = get_platform_info()
+        exe_name = 'label-printing-server.exe' if system == 'Windows' else 'label-printing-server'
         print("\n" + "=" * 70)
         print("打包完成！")
         print("=" * 70)
-        print(f"\n可执行文件位置: dist/{system}-{machine}/")
+        print(f"\n可执行文件位置: dist/{exe_name}")
+        print(f"平台: {system} {machine}")
         print("\n提示:")
         print("  1. 测试可执行文件是否正常工作")
-        print("  2. 配置 config/printer_config.json")
+        print("  2. 配置 dist/config/printer_config.json")
         print("  3. 运行程序并发送测试消息")
         print("\n" + "=" * 70)
         

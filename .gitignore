@@ -36,16 +36,23 @@ env/
 *~
 
 # Logs
+data/logs/*.log
+data/logs/*.txt
 logs/*.log
 logs/*.txt
 *.log
 
 # Failed Labels (keep directory but ignore files)
+data/failed_labels/*.zpl
 failed_labels/*.zpl
 
 # OS
 .DS_Store
 Thumbs.db
 
+# Build artifacts
+*.spec
+app.spec
+
 # Config (keep example)
-# config/printer_config.json  # 如果需要，可以取消注释以忽略配置文件
+# src/config/printer_config.json  # 如果需要，可以取消注释以忽略配置文件

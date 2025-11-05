@@ -5,7 +5,7 @@ ZPL代码生成器模块
 提供标签ZPL代码生成功能
 """
 
-from utils.image_utils import text_to_image_zpl
+from src.utils.image_utils import text_to_image_zpl
 
 
 class ZPLGenerator:

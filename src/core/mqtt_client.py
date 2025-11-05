@@ -7,17 +7,18 @@ MQTT客户端模块
 
 import json
 import datetime
-from core.printer import ZebraPrinter
-from core.zpl_generator import ZPLGenerator
-from core.pdf_printer import PDFPrinter
-from core.escpos_printer import ESCPOSPrinter
+from src.core.printer import ZebraPrinter
+from src.core.zpl_generator import ZPLGenerator
+from src.core.pdf_printer import PDFPrinter
+from src.core.escpos_printer import ESCPOSPrinter
 
 
 class LabelPrintMQTT:
     """MQTT标签打印客户端（跨平台）"""
     
     def __init__(self, broker_host, broker_port=1883, topic="zebra/print", 
-                 username=None, password=None, printer_config=None, printers_config=None):
+                 username=None, password=None, protocol=None, url=None,
+                 printer_config=None, printers_config=None):
         """
         初始化MQTT客户端
         
@@ -27,6 +28,8 @@ class LabelPrintMQTT:
             topic: 订阅的主题
             username: MQTT用户名
             password: MQTT密码
+            protocol: 协议类型（ws, wss, mqtt, mqtts, tcp等）
+            url: 原始URL（用于WebSocket路径提取）
             printer_config: 单打印机配置（兼容旧版）
             printers_config: 多打印机配置（新版）
         """
@@ -35,6 +38,8 @@ class LabelPrintMQTT:
         self.topic = topic
         self.username = username
         self.password = password
+        self.protocol = protocol
+        self.url = url
         
         # 打印机映射表 {print_type: printer_instance}
         self.printer_map = {}  # 专用打印机映射
@@ -334,9 +339,9 @@ class LabelPrintMQTT:
                     # 保存失败的ZPL到文件
                     try:
                         import os
-                        os.makedirs('failed_labels', exist_ok=True)
+                        os.makedirs('data/failed_labels', exist_ok=True)
                         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"failed_labels/failed_label_{timestamp}.zpl"
+                        filename = f"data/failed_labels/failed_label_{timestamp}.zpl"
                         with open(filename, 'w', encoding='utf-8') as f:
                             f.write(zpl_code)
                         print(f"ZPL已保存到: {filename}")
@@ -414,8 +419,29 @@ class LabelPrintMQTT:
             
             print("="*70)
             
-            # 创建客户端
-            self.client = mqtt.Client()
+            # 创建客户端 - 根据协议选择传输方式
+            if self.protocol in ['ws', 'wss']:
+                # WebSocket连接
+                transport = "websockets"
+                # 从URL中提取WebSocket路径
+                ws_path = None
+                if self.url:
+                    try:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(self.url)
+                        ws_path = parsed.path if parsed.path else '/mqtt'  # 默认路径
+                    except:
+                        ws_path = '/mqtt'  # 默认路径
+                else:
+                    ws_path = '/mqtt'  # 默认路径
+                
+                print(f"使用WebSocket连接，路径: {ws_path}")
+                self.client = mqtt.Client(transport=transport)
+                self.client.ws_set_options(path=ws_path)
+            else:
+                # TCP连接（mqtt, mqtts, tcp等）
+                self.client = mqtt.Client()
+            
             self.client.on_connect = self.on_connect
             self.client.on_message = self.on_message
             self.client.on_disconnect = self.on_disconnect
@@ -426,6 +452,10 @@ class LabelPrintMQTT:
             
             # 连接服务器
             print("\n正在连接MQTT服务器...")
+            if self.protocol in ['wss', 'mqtts', 'ssl']:
+                # SSL/TLS连接
+                self.client.tls_set()
+            
             self.client.connect(self.broker_host, self.broker_port, 60)
             
             # 启动循环

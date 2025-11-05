@@ -39,7 +39,7 @@ class PDFPrinter:
             return printer_name
         
         try:
-            from utils.fuzzy_match import fuzzy_search_printer
+            from src.utils.fuzzy_match import fuzzy_search_printer
             
             # 尝试模糊匹配
             matched_name = fuzzy_search_printer(printer_name)

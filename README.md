@@ -18,31 +18,33 @@
 ```
 label-printing-server/
 ├── app.py                          # 主入口文件 ⭐
-├── config/                         # 配置模块
-│   ├── __init__.py
-│   ├── config.py                   # 配置管理
-│   └── printer_config.json         # 配置文件
-├── core/                           # 核心功能模块
-│   ├── __init__.py
-│   ├── printer.py                  # 打印机控制
-│   ├── mqtt_client.py              # MQTT客户端
-│   └── zpl_generator.py            # ZPL代码生成
-├── utils/                          # 工具模块
-│   ├── __init__.py
-│   ├── font_utils.py               # 字体工具
-│   ├── image_utils.py              # 图像处理
-│   └── fuzzy_match.py              # 模糊匹配
+├── config/                         # 配置文件目录（运行时配置）
+│   ├── printer_config.json         # 配置文件 ⭐
+│   ├── printer_config_example.json # 配置示例
+│   └── ...
+├── src/                            # 源代码目录
+│   ├── config/                     # 配置管理模块
+│   │   ├── config.py               # 配置管理代码
+│   ├── core/                       # 核心功能模块
+│   │   ├── printer.py              # 打印机控制
+│   │   ├── mqtt_client.py          # MQTT客户端
+│   │   ├── zpl_generator.py        # ZPL代码生成
+│   │   ├── pdf_printer.py          # PDF打印
+│   │   └── escpos_printer.py       # ESC/POS打印
+│   └── utils/                      # 工具模块
+│       ├── font_utils.py           # 字体工具
+│       ├── image_utils.py          # 图像处理
+│       └── fuzzy_match.py          # 模糊匹配
+├── scripts/                        # 脚本目录
+│   ├── build.py                    # 构建脚本
+│   └── tools/                      # 工具脚本
 ├── tests/                          # 测试模块
 │   ├── test_mqtt_send.py           # MQTT测试
-│   ├── test-chinese.py             # 中文测试
-│   └── test-zt411.py               # 打印机测试
+│   └── ...
 ├── docs/                           # 文档目录
-│   ├── MQTT打印机-README.md
-│   ├── MQTT打印说明.md
-│   ├── 打印机模糊搜索说明.md
-│   └── 跨平台部署指南.md
-├── logs/                           # 日志目录
-├── failed_labels/                  # 失败标签保存目录
+├── data/                           # 运行时数据目录
+│   ├── logs/                       # 日志目录
+│   └── failed_labels/             # 失败标签保存目录
 ├── requirements.txt                # 依赖管理
 └── README.md                       # 项目说明
 ```
@@ -59,6 +61,22 @@ pip install -r requirements.txt
 
 编辑 `config/printer_config.json`：
 
+**方式1：使用URL格式（推荐）**
+```json
+{
+  "mqtt": {
+    "url": "mqtt://127.0.0.1:1883",
+    "topic": "zebra/print",
+    "username": null,
+    "password": null
+  },
+  "printer": {
+    "name": "ZT411"
+  }
+}
+```
+
+**方式2：使用分离格式（向后兼容）**
 ```json
 {
   "mqtt": {
@@ -71,6 +89,16 @@ pip install -r requirements.txt
   }
 }
 ```
+
+**支持的URL格式：**
+- `mqtt://127.0.0.1:1883` - 标准MQTT
+- `ws://10.100.10.121:8083/mqtt` - WebSocket MQTT（带路径）
+- `tcp://10.100.10.121:1883` - TCP MQTT（不带路径）
+- `mqtts://example.com:8883` - SSL MQTT
+
+**注意：** 
+- URL中可以包含路径（如 `/mqtt`），路径会保留但不会用作topic
+- Topic需要单独配置，不受URL路径影响
 
 ### 3. 启动服务
 
@@ -242,21 +270,28 @@ python app.py
 ### 项目架构
 
 - **app.py**: 主入口，负责启动服务
-- **config/**: 配置管理模块，处理配置文件加载
-- **core/**: 核心业务逻辑
+- **src/config/**: 配置管理模块，处理配置文件加载
+- **src/core/**: 核心业务逻辑
   - `printer.py`: 打印机控制，支持多平台
   - `mqtt_client.py`: MQTT消息接收和处理
   - `zpl_generator.py`: ZPL标签代码生成
-- **utils/**: 通用工具函数
+  - `pdf_printer.py`: PDF文档打印
+  - `escpos_printer.py`: ESC/POS热敏打印
+- **src/utils/**: 通用工具函数
   - `font_utils.py`: 字体路径获取
   - `image_utils.py`: 文本转图像
   - `fuzzy_match.py`: 模糊匹配算法
+- **scripts/**: 构建和工具脚本
+- **tests/**: 测试脚本和测试数据
+- **docs/**: 项目文档
+- **data/**: 运行时数据（日志、失败的标签等）
 
 ### 添加新功能
 
-1. 在对应模块中添加功能
-2. 更新 `__init__.py` 导出
+1. 在 `src/` 目录下的对应模块中添加功能
+2. 更新对应模块的 `__init__.py` 导出
 3. 在 `app.py` 中集成
+4. 添加相应的测试脚本到 `tests/` 目录
 
 ## 📅 更新日期
 
