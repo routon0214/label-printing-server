@@ -1,6 +1,6 @@
 {
   "mqtt": {
-    "url": "ws://10.100.10.121:8083/mqtt",
+    "url": "tcp://10.100.10.121:1883",
     "topic": "zebra/print",
     "username": null,
     "password": null
@@ -16,29 +16,6 @@
       "device": null,
       "default": false,
       "_comment": "斑马标签打印机 - 处理ZPL标签"
-    },
-    {
-      "name": "KONICA",
-      "types": [
-        "*"
-      ],
-      "ip": null,
-      "port": 9100,
-      "device": null,
-      "_comment": "激光打印机 - 处理PDF文档（会自动匹配到 KONICA MINOLTA Universal PCL）",
-      "default": false
-    },
-    {
-      "name": "Deli",
-      "types": [
-        "receipt",
-        "escpos"
-      ],
-      "ip": null,
-      "port": 9100,
-      "device": null,
-      "_comment": "ESC/POS热敏打印机 - 处理小票",
-      "default": false
     },
     {
       "name": "KONICA MINOLTA Universal PCL",

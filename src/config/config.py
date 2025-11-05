@@ -241,6 +241,15 @@ def create_default_config(config_file='config/printer_config.json'):
                 "说明": "也可以使用分离格式：host、port、topic分别配置（向后兼容）"
             }
         },
+        "web": {
+            "username": "admin",
+            "password": "admin123",
+            "_comment": {
+                "username": "Web界面登录用户名",
+                "password": "Web界面登录密码",
+                "说明": "建议修改默认密码以确保安全"
+            }
+        },
         "printer": {
             "name": None,
             "ip": None,

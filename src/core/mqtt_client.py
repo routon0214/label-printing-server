@@ -7,10 +7,30 @@ MQTT客户端模块
 
 import json
 import datetime
+import os
+import sys
+# 添加utils目录到路径
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'src'))
 from src.core.printer import ZebraPrinter
 from src.core.zpl_generator import ZPLGenerator
 from src.core.pdf_printer import PDFPrinter
 from src.core.escpos_printer import ESCPOSPrinter
+
+# 导入日志模块
+try:
+    from src.utils.logger import get_logger
+    logger = get_logger('mqtt_client', 'data/logs')
+except ImportError:
+    # 如果日志模块不可用，使用简单的print
+    logger = None
+    def log_info(msg):
+        print(f"[INFO] {msg}")
+    def log_error(msg):
+        print(f"[ERROR] {msg}")
+    def log_warning(msg):
+        print(f"[WARNING] {msg}")
+    def log_debug(msg):
+        print(f"[DEBUG] {msg}")
 
 
 class LabelPrintMQTT:
@@ -60,6 +80,17 @@ class LabelPrintMQTT:
         
         self.client = None
         self.zpl_generator = ZPLGenerator()
+        # 连接状态标记
+        self.is_connected = False
+        self.connection_error = None
+        
+        # 日志记录
+        if logger:
+            logger.info(f"初始化MQTT客户端: {broker_host}:{broker_port}, 主题: {topic}")
+            if protocol:
+                logger.info(f"使用协议: {protocol}")
+            if url:
+                logger.info(f"连接URL: {url}")
     
     def _init_multiple_printers(self, printers_config):
         """初始化多打印机配置"""
@@ -225,22 +256,88 @@ class LabelPrintMQTT:
     def on_connect(self, client, userdata, flags, rc):
         """连接回调"""
         if rc == 0:
-            print(f"✓ 已连接到MQTT服务器: {self.broker_host}:{self.broker_port}")
-            print(f"✓ 订阅主题: {self.topic}")
-            client.subscribe(self.topic)
+            self.is_connected = True
+            self.connection_error = None
+            msg = f"✓ 已连接到MQTT服务器: {self.broker_host}:{self.broker_port}"
+            print(msg)
+            if logger:
+                logger.info(msg)
+            
+            print(f"正在订阅主题: {self.topic}")
+            if logger:
+                logger.info(f"正在订阅主题: {self.topic}")
+            
+            # 订阅主题，QoS=0
+            result, mid = client.subscribe(self.topic, 0)
+            if result == 0:
+                msg = f"✓ 订阅请求已发送 (消息ID: {mid})"
+                print(msg)
+                if logger:
+                    logger.info(msg)
+            else:
+                error_msg = f"订阅失败，错误码: {result}"
+                print(f"✗ {error_msg}")
+                self.connection_error = error_msg
+                if logger:
+                    logger.error(error_msg)
         else:
-            print(f"✗ 连接失败，错误码: {rc}")
+            self.is_connected = False
+            error_messages = {
+                1: "协议版本不正确",
+                2: "客户端标识符无效",
+                3: "服务器不可用",
+                4: "用户名或密码错误",
+                5: "未授权"
+            }
+            error_msg = error_messages.get(rc, f"未知错误码: {rc}")
+            self.connection_error = error_msg
+            msg = f"✗ 连接失败，错误码: {rc} - {error_msg}"
+            print(msg)
+            if logger:
+                logger.error(msg)
+    
+    def on_subscribe(self, client, userdata, mid, granted_qos):
+        """订阅回调"""
+        msg1 = f"✓ 订阅成功确认 (消息ID: {mid}, QoS: {granted_qos})"
+        msg2 = f"✓ 主题: {self.topic}"
+        msg3 = "服务已就绪，等待打印任务..."
+        print(msg1)
+        print(msg2)
+        print(msg3 + "\n")
+        if logger:
+            logger.info(f"{msg1}, {msg2}")
+            logger.info(msg3)
     
     def on_message(self, client, userdata, msg):
         """消息回调"""
         try:
+            if logger:
+                logger.info(f"收到MQTT消息 - 主题: {msg.topic}, 长度: {len(msg.payload)} 字节")
+            
             print(f"\n{'='*60}")
             print(f"收到打印任务")
             print(f"主题: {msg.topic}")
+            print(f"消息长度: {len(msg.payload)} 字节")
             
             # 解析JSON数据
-            data = json.loads(msg.payload.decode('utf-8'))
+            try:
+                payload_str = msg.payload.decode('utf-8')
+                preview = payload_str[:200] if len(payload_str) > 200 else payload_str
+                print(f"消息内容: {preview}{'...' if len(payload_str) > 200 else ''}")
+                if logger:
+                    logger.debug(f"消息内容预览: {preview}")
+            except Exception as decode_error:
+                error_msg = f"消息解码失败: {decode_error}"
+                print(f"✗ {error_msg}")
+                print(f"原始数据: {msg.payload[:100]}")
+                if logger:
+                    logger.error(f"{error_msg}, 原始数据: {msg.payload[:100]}")
+                return
+            
+            data = json.loads(payload_str)
             print(f"数据: {json.dumps(data, ensure_ascii=False, indent=2)}")
+            if logger:
+                logger.info(f"消息解析成功，打印类型: {data.get('print_type', 'label')}")
             
             # 判断打印类型
             print_type = data.get('print_type', 'label')  # 默认是标签打印
@@ -293,6 +390,12 @@ class LabelPrintMQTT:
                         print("  使用: ESC/POS专用打印机")
                     else:
                         print("  使用: 通用打印机（备选）")
+                    
+                    # 检查是否使用原始文本格式
+                    if 'raw_text' in data:
+                        print("  格式: 原始文本")
+                    else:
+                        print("  格式: 结构化小票")
                     
                     success = receipt_printer.print_receipt(data)
                 
@@ -358,9 +461,14 @@ class LabelPrintMQTT:
     
     def on_disconnect(self, client, userdata, rc):
         """断开连接回调"""
-        print(f"✗ 断开连接，错误码: {rc}")
+        self.is_connected = False
         if rc != 0:
+            self.connection_error = f"意外断开，错误码: {rc}"
+            print(f"✗ 断开连接，错误码: {rc}")
             print("尝试重新连接...")
+        else:
+            self.connection_error = None
+            print("✓ 正常断开连接")
     
     def start(self):
         """启动MQTT客户端"""
@@ -424,20 +532,56 @@ class LabelPrintMQTT:
                 # WebSocket连接
                 transport = "websockets"
                 # 从URL中提取WebSocket路径
-                ws_path = None
+                ws_path = '/mqtt'  # 默认路径
+                ws_headers = {}
+                
                 if self.url:
                     try:
                         from urllib.parse import urlparse
                         parsed = urlparse(self.url)
-                        ws_path = parsed.path if parsed.path else '/mqtt'  # 默认路径
-                    except:
-                        ws_path = '/mqtt'  # 默认路径
-                else:
-                    ws_path = '/mqtt'  # 默认路径
+                        # 提取路径，如果没有路径则使用默认值
+                        if parsed.path:
+                            ws_path = parsed.path
+                        else:
+                            ws_path = '/mqtt'
+                        
+                        # 如果路径为空字符串，也使用默认值
+                        if not ws_path or ws_path == '/':
+                            ws_path = '/mqtt'
+                        
+                        # 记录解析结果
+                        if logger:
+                            logger.info(f"WebSocket URL解析: 主机={parsed.hostname}, 端口={parsed.port}, 路径={ws_path}")
+                        
+                    except Exception as parse_error:
+                        ws_path = '/mqtt'
+                        if logger:
+                            logger.warning(f"WebSocket URL解析失败: {parse_error}, 使用默认路径: {ws_path}")
                 
-                print(f"使用WebSocket连接，路径: {ws_path}")
+                print(f"使用WebSocket连接")
+                print(f"  主机: {self.broker_host}")
+                print(f"  端口: {self.broker_port}")
+                print(f"  路径: {ws_path}")
+                
+                if logger:
+                    logger.info(f"创建WebSocket客户端 - 主机: {self.broker_host}, 端口: {self.broker_port}, 路径: {ws_path}")
+                
+                # 创建WebSocket客户端
                 self.client = mqtt.Client(transport=transport)
-                self.client.ws_set_options(path=ws_path)
+                
+                # 设置WebSocket选项
+                try:
+                    self.client.ws_set_options(path=ws_path, headers=ws_headers)
+                    if logger:
+                        logger.info(f"WebSocket选项已设置: path={ws_path}")
+                except Exception as ws_error:
+                    if logger:
+                        logger.error(f"设置WebSocket选项失败: {ws_error}")
+                    # 尝试只设置路径
+                    try:
+                        self.client.ws_set_options(path=ws_path)
+                    except:
+                        pass
             else:
                 # TCP连接（mqtt, mqtts, tcp等）
                 self.client = mqtt.Client()
@@ -445,6 +589,7 @@ class LabelPrintMQTT:
             self.client.on_connect = self.on_connect
             self.client.on_message = self.on_message
             self.client.on_disconnect = self.on_disconnect
+            self.client.on_subscribe = self.on_subscribe
             
             # 设置认证
             if self.username and self.password:
@@ -452,20 +597,120 @@ class LabelPrintMQTT:
             
             # 连接服务器
             print("\n正在连接MQTT服务器...")
+            if logger:
+                logger.info(f"开始连接MQTT服务器: {self.broker_host}:{self.broker_port}")
+                if self.protocol:
+                    logger.info(f"使用协议: {self.protocol}")
+                if self.url:
+                    logger.info(f"连接URL: {self.url}")
+            
             if self.protocol in ['wss', 'mqtts', 'ssl']:
                 # SSL/TLS连接
                 self.client.tls_set()
+                if logger:
+                    logger.info("已启用SSL/TLS加密")
             
-            self.client.connect(self.broker_host, self.broker_port, 60)
+            # 启动非阻塞循环（在连接前启动，以便处理连接回调）
+            self.client.loop_start()
+            if logger:
+                logger.debug("MQTT事件循环已启动")
             
-            # 启动循环
-            print("服务已启动，等待打印任务...\n")
-            self.client.loop_forever()
+            try:
+                # 对于WebSocket连接，需要确保在连接前所有设置都完成
+                if self.protocol in ['ws', 'wss']:
+                    if logger:
+                        logger.info(f"准备WebSocket连接 - 主机: {self.broker_host}, 端口: {self.broker_port}")
+                    # WebSocket连接可能需要特殊处理
+                    # 先启动循环，再连接
+                    print(f"正在连接WebSocket服务器: ws://{self.broker_host}:{self.broker_port}")
+                else:
+                    if logger:
+                        logger.info(f"准备TCP连接 - 主机: {self.broker_host}, 端口: {self.broker_port}")
+                
+                result = self.client.connect(self.broker_host, self.broker_port, 60)
+                
+                if logger:
+                    logger.info(f"connect()调用完成，返回码: {result} (0=成功, 其他=错误)")
+                    if result != 0:
+                        logger.error(f"连接调用返回错误码: {result}")
+                if result != 0:
+                    # 连接返回错误码
+                    error_messages = {
+                        1: "协议版本不正确",
+                        2: "客户端标识符无效",
+                        3: "服务器不可用",
+                        4: "用户名或密码错误",
+                        5: "未授权"
+                    }
+                    error_msg = error_messages.get(result, f"连接失败，错误码: {result}")
+                    self.connection_error = error_msg
+                    self.is_connected = False
+                    print(f"✗ {error_msg}")
+                    self.client.loop_stop()
+                    return
+                
+                # 等待连接建立（最多等待5秒）
+                import time
+                timeout = 5
+                start_time = time.time()
+                while not self.is_connected and (time.time() - start_time) < timeout:
+                    if self.connection_error:
+                        # 如果有错误信息，说明连接失败
+                        print(f"✗ {self.connection_error}")
+                        self.client.loop_stop()
+                        return
+                    time.sleep(0.1)
+                
+                if not self.is_connected:
+                    if not self.connection_error:
+                        self.connection_error = "连接超时，请检查服务器地址和端口"
+                    print(f"✗ {self.connection_error}")
+                    self.client.loop_stop()
+                    return
+                
+                print("服务已启动，等待打印任务...\n")
+                
+                # 保持线程运行，定期检查连接状态
+                import time
+                while True:
+                    time.sleep(2)
+                    # 检查连接状态
+                    if self.client:
+                        try:
+                            # 检查是否实际连接
+                            if hasattr(self.client, 'is_connected'):
+                                if not self.client.is_connected():
+                                    if self.is_connected:
+                                        # 之前是连接的，现在断开了
+                                        self.is_connected = False
+                                        self.connection_error = "连接已断开"
+                                        print("✗ 检测到连接断开")
+                        except:
+                            pass
+                            
+            except Exception as conn_error:
+                # 连接异常（如网络错误）
+                self.connection_error = f"连接异常: {str(conn_error)}"
+                self.is_connected = False
+                print(f"✗ 连接异常: {conn_error}")
+                import traceback
+                traceback.print_exc()
+                if self.client:
+                    try:
+                        self.client.loop_stop()
+                    except:
+                        pass
+                # 不抛出异常，让线程正常结束
+                return
             
         except ImportError:
+            self.connection_error = "需要安装 paho-mqtt 库"
+            self.is_connected = False
             print("错误：需要安装 paho-mqtt 库")
             print("请运行: pip install paho-mqtt")
         except Exception as e:
+            self.connection_error = f"启动失败: {str(e)}"
+            self.is_connected = False
             print(f"启动失败: {e}")
             import traceback
             traceback.print_exc()

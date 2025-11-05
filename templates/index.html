@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打印机测试服务</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🖨️ 打印机测试服务</h1>
+            <p class="subtitle">支持ZPL标签、PDF文档、ESC/POS小票打印</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">MQTT状态:</span>
+                <span id="mqtt-status" class="status-value">检查中...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">打印机数量:</span>
+                <span id="printer-count" class="status-value">-</span>
+            </div>
+        </div>
+
+        <!-- 主Tab导航 -->
+        <div class="main-tabs">
+            <button class="main-tab-btn active" onclick="switchMainTab('print')">📤 打印测试</button>
+            <button class="main-tab-btn" onclick="switchMainTab('config')">⚙️ 配置管理</button>
+            <button class="main-tab-btn" onclick="switchMainTab('status')">📊 状态监控</button>
+        </div>
+
+        <main>
+            <!-- 打印测试Tab -->
+            <div id="print-tab" class="main-tab-content active">
+                <div class="card">
+                    <h2>📤 文件上传打印</h2>
+                    <form id="upload-form" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="file-input">选择文件:</label>
+                            <input type="file" id="file-input" name="file" required>
+                            <small>支持格式: .zpl, .pdf, .txt, .json (最大50MB)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="print-type">打印类型:</label>
+                            <select id="print-type" name="print_type">
+                                <option value="">自动检测（根据文件扩展名）</option>
+                                <option value="label">ZPL标签打印</option>
+                                <option value="pdf">PDF文档打印</option>
+                                <option value="escpos">ESC/POS小票打印</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" id="upload-btn" class="btn btn-primary">
+                                <span class="btn-text">上传并打印</span>
+                                <span class="btn-loading" style="display: none;">处理中...</span>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="upload-result" class="result-message" style="display: none;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>📝 JSON数据打印</h2>
+                    <form id="json-form">
+                        <div class="form-group">
+                            <label for="json-input">JSON数据:</label>
+                            <textarea id="json-input" name="json_data" rows="10" 
+                                      placeholder='{"print_type": "label", "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"}'></textarea>
+                            <small>支持标签、PDF、小票打印的JSON格式数据</small>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" id="json-btn" class="btn btn-primary">
+                                <span class="btn-text">发送打印</span>
+                                <span class="btn-loading" style="display: none;">处理中...</span>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="json-result" class="result-message" style="display: none;"></div>
+                </div>
+
+                <div class="card">
+                    <h2>📋 示例数据</h2>
+                    <div class="examples">
+                        <div class="example-item">
+                            <h3>ZPL标签示例</h3>
+                            <pre><code>{
+  "print_type": "label",
+  "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('zpl')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>ESC/POS小票示例</h3>
+                            <pre><code>{
+  "print_type": "escpos",
+  "raw_text": "测试小票\\n这是第二行\\n感谢惠顾！"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('escpos')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>结构化小票示例</h3>
+                            <pre><code>{
+  "print_type": "escpos",
+  "title": "销售收据",
+  "items": [
+    {"name": "商品A", "qty": 2, "price": 10.00},
+    {"name": "商品B", "qty": 1, "price": 20.00}
+  ],
+  "total": 40.00,
+  "footer": "感谢惠顾"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('receipt')">加载示例</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置管理Tab -->
+            <div id="config-tab" class="main-tab-content">
+                <div class="card">
+                    <h2>⚙️ 配置管理</h2>
+                    
+                    <!-- 子Tab导航 -->
+                    <div class="sub-tabs">
+                        <button class="sub-tab-btn active" onclick="switchSubTab('mqtt-config')">MQTT配置</button>
+                        <button class="sub-tab-btn" onclick="switchSubTab('printer-config')">打印机配置</button>
+                        <button class="sub-tab-btn" onclick="switchSubTab('import-export')">导入/导出</button>
+                    </div>
+
+                    <!-- MQTT配置 -->
+                    <div id="mqtt-config" class="sub-tab-content active">
+                        <form id="mqtt-config-form">
+                            <div class="form-group">
+                                <label for="mqtt-url">MQTT URL:</label>
+                                <input type="text" id="mqtt-url" name="url" placeholder="mqtt://127.0.0.1:1883">
+                                <small>格式: mqtt://host:port 或 ws://host:port/mqtt</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt-topic">主题:</label>
+                                <input type="text" id="mqtt-topic" name="topic" placeholder="zebra/print">
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt-username">用户名:</label>
+                                <input type="text" id="mqtt-username" name="username" placeholder="可选">
+                            </div>
+                            <div class="form-group">
+                                <label for="mqtt-password">密码:</label>
+                                <input type="password" id="mqtt-password" name="password" placeholder="可选">
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-primary">保存MQTT配置</button>
+                                <button type="button" class="btn btn-secondary" onclick="loadConfig()">重新加载</button>
+                            </div>
+                        </form>
+                        <div id="mqtt-result" class="result-message" style="display: none;"></div>
+                    </div>
+
+                    <!-- 打印机配置 -->
+                    <div id="printer-config" class="sub-tab-content">
+                        <div class="printers-list" id="printers-list">
+                            <p>加载中...</p>
+                        </div>
+                        <div class="form-group">
+                            <button type="button" class="btn btn-primary" onclick="addPrinter()">添加打印机</button>
+                            <button type="button" class="btn btn-secondary" onclick="loadConfig()">重新加载</button>
+                        </div>
+                        <div id="printers-result" class="result-message" style="display: none;"></div>
+                        
+                        <!-- 打印机编辑对话框 -->
+                        <div id="printer-modal" class="modal" style="display: none;">
+                            <div class="modal-content">
+                                <span class="close" onclick="closePrinterModal()">&times;</span>
+                                <h2 id="printer-modal-title">添加打印机</h2>
+                                <form id="printer-form">
+                                    <input type="hidden" id="printer-index" value="-1">
+                                    <div class="form-group">
+                                        <label for="printer-name">打印机名称:</label>
+                                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                                            <input type="text" id="printer-name" name="name" placeholder="例如: ZT411标签打印机" required style="flex: 1;">
+                                            <button type="button" class="btn btn-secondary" onclick="scanPrinters()" id="scan-btn" style="white-space: nowrap;">扫描打印机</button>
+                                        </div>
+                                        <div id="printer-scan-result" style="margin-top: 10px; display: none;">
+                                            <select id="printer-select" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.95em;">
+                                                <option value="">请选择打印机...</option>
+                                            </select>
+                                            <small style="display: block; margin-top: 5px; color: #888;">选择打印机后会自动填充名称</small>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="printer-types">支持类型:</label>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                                            <label><input type="checkbox" name="types" value="label"> 标签(ZPL)</label>
+                                            <label><input type="checkbox" name="types" value="pdf"> PDF</label>
+                                            <label><input type="checkbox" name="types" value="escpos"> ESC/POS小票</label>
+                                            <label><input type="checkbox" name="types" value="*"> 通用(所有类型)</label>
+                                        </div>
+                                        <small>至少选择一种类型</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="printer-ip">IP地址:</label>
+                                        <input type="text" id="printer-ip" name="ip" placeholder="例如: 192.168.1.100">
+                                        <small>网络打印机IP地址（可选）</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="printer-port">端口:</label>
+                                        <input type="number" id="printer-port" name="port" value="9100" placeholder="9100">
+                                        <small>网络打印端口（默认9100）</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="printer-device">设备路径:</label>
+                                        <input type="text" id="printer-device" name="device" placeholder="例如: /dev/usb/lp0">
+                                        <small>Linux USB设备路径（可选）</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <button type="submit" class="btn btn-primary">保存</button>
+                                        <button type="button" class="btn btn-secondary" onclick="closePrinterModal()">取消</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 导入/导出 -->
+                    <div id="import-export" class="sub-tab-content">
+                        <div class="form-group">
+                            <h3>导出配置</h3>
+                            <button type="button" class="btn btn-primary" onclick="exportConfig()">导出配置文件</button>
+                            <small>下载当前配置文件到本地</small>
+                        </div>
+                        <div class="form-group">
+                            <h3>导入配置</h3>
+                            <input type="file" id="config-file-input" accept=".json" style="margin-bottom: 10px;">
+                            <button type="button" class="btn btn-primary" onclick="importConfig()">导入配置文件</button>
+                            <small>从本地文件导入配置（会覆盖当前配置）</small>
+                        </div>
+                        <div id="import-export-result" class="result-message" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 状态监控Tab -->
+            <div id="status-tab" class="main-tab-content">
+                <div class="card">
+                    <h2>📊 服务状态</h2>
+                    <div id="status-info">
+                        <p>加载中...</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>🖨️ 打印机信息</h2>
+                    <div id="printer-info">
+                        <p>加载中...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>打印机MQTT服务 | 同时支持Web上传和MQTT消息接收</p>
+        </footer>
+    </div>
+
+    <script>
+        // 主Tab切换
+        function switchMainTab(tabName) {
+            // 隐藏所有主Tab内容
+            document.querySelectorAll('.main-tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 移除所有主Tab按钮的active状态
+            document.querySelectorAll('.main-tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 显示选中的Tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+            
+            // 如果切换到状态监控，刷新状态
+            if (tabName === 'status') {
+                loadStatusInfo();
+            }
+            // 如果切换到配置管理，加载配置
+            if (tabName === 'config') {
+                loadConfig();
+            }
+        }
+
+        // 子Tab切换（配置管理内部）
+        function switchSubTab(tabName) {
+            // 隐藏所有子Tab内容
+            document.querySelectorAll('.sub-tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 移除所有子Tab按钮的active状态
+            document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 显示选中的Tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // 如果切换到打印机配置，加载打印机列表
+            if (tabName === 'printer-config') {
+                loadPrinters();
+            }
+        }
+
+        // 状态检查
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                let statusText = '✗ 已停止';
+                let statusClass = 'status-error';
+                if (data.mqtt.status === 'running') {
+                    statusText = '✓ 已连接';
+                    statusClass = 'status-success';
+                } else if (data.mqtt.status === 'connecting') {
+                    statusText = '⏳ 连接中...';
+                    statusClass = 'status-value';
+                }
+                document.getElementById('mqtt-status').textContent = statusText;
+                document.getElementById('mqtt-status').className = 'status-value ' + statusClass;
+                document.getElementById('printer-count').textContent = data.printers.count;
+            } catch (error) {
+                document.getElementById('mqtt-status').textContent = '✗ 检查失败';
+                document.getElementById('mqtt-status').className = 'status-value status-error';
+            }
+        }
+
+        // 加载状态信息
+        async function loadStatusInfo() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                let statusText = '已停止';
+                let statusClass = 'status-error';
+                if (data.mqtt.status === 'running') {
+                    statusText = '已连接';
+                    statusClass = 'status-success';
+                } else if (data.mqtt.status === 'connecting') {
+                    statusText = '连接中...';
+                    statusClass = 'status-value';
+                }
+                
+                let errorHtml = '';
+                if (data.mqtt.error) {
+                    errorHtml = `<p><strong>错误信息:</strong> <span class="status-error">${data.mqtt.error}</span></p>`;
+                }
+                
+                const statusHtml = `
+                    <div class="status-detail">
+                        <h3>MQTT连接信息</h3>
+                        <p><strong>状态:</strong> <span class="${statusClass}">${statusText}</span></p>
+                        <p><strong>服务器:</strong> ${data.mqtt.host}:${data.mqtt.port}</p>
+                        <p><strong>主题:</strong> ${data.mqtt.topic}</p>
+                        ${errorHtml}
+                    </div>
+                `;
+                document.getElementById('status-info').innerHTML = statusHtml;
+                
+                // 加载打印机信息
+                loadPrintersInfo();
+            } catch (error) {
+                document.getElementById('status-info').innerHTML = '<p class="error">加载状态失败: ' + error.message + '</p>';
+            }
+        }
+
+        // 加载打印机信息
+        async function loadPrintersInfo() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                if (data.printers.count === 0) {
+                    document.getElementById('printer-info').innerHTML = '<p>未配置打印机</p>';
+                    return;
+                }
+                
+                let printersHtml = '<div class="printers-grid">';
+                data.printers.configs.forEach((printer, index) => {
+                    const types = printer.types || [];
+                    const typeStr = types.join(', ');
+                    printersHtml += `
+                        <div class="printer-card">
+                            <h4>${printer.name || '未命名打印机'}</h4>
+                            <p><strong>类型:</strong> ${typeStr}</p>
+                            <p><strong>IP:</strong> ${printer.ip || 'N/A'}</p>
+                            <p><strong>端口:</strong> ${printer.port || 9100}</p>
+                        </div>
+                    `;
+                });
+                printersHtml += '</div>';
+                document.getElementById('printer-info').innerHTML = printersHtml;
+            } catch (error) {
+                document.getElementById('printer-info').innerHTML = '<p class="error">加载打印机信息失败: ' + error.message + '</p>';
+            }
+        }
+
+        // 加载配置
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                
+                // 填充MQTT配置表单
+                if (data.mqtt) {
+                    document.getElementById('mqtt-url').value = data.mqtt.url || '';
+                    document.getElementById('mqtt-topic').value = data.mqtt.topic || '';
+                    document.getElementById('mqtt-username').value = data.mqtt.username || '';
+                    // 密码字段不填充（显示为***）
+                }
+            } catch (error) {
+                console.error('加载配置失败:', error);
+            }
+        }
+
+        // 加载打印机列表
+        async function loadPrinters() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                
+                const printers = data.printers || [];
+                if (printers.length === 0) {
+                    document.getElementById('printers-list').innerHTML = '<p>未配置打印机</p>';
+                    return;
+                }
+                
+                let printersHtml = '<div class="printers-list-items">';
+                printers.forEach((printer, index) => {
+                    printersHtml += `
+                        <div class="printer-item">
+                            <h4>${printer.name || '未命名'}</h4>
+                            <p>类型: ${(printer.types || []).join(', ')}</p>
+                            <p>IP: ${printer.ip || 'N/A'}</p>
+                            <button class="btn btn-small" onclick="editPrinter(${index})">编辑</button>
+                            <button class="btn btn-small btn-danger" onclick="deletePrinter(${index})">删除</button>
+                        </div>
+                    `;
+                });
+                printersHtml += '</div>';
+                document.getElementById('printers-list').innerHTML = printersHtml;
+            } catch (error) {
+                document.getElementById('printers-list').innerHTML = '<p class="error">加载失败: ' + error.message + '</p>';
+            }
+        }
+
+        // 导出配置
+        async function exportConfig() {
+            try {
+                const response = await fetch('/api/config/export');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const blob = new Blob([JSON.stringify(data.config, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.filename || 'printer_config.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    showResult(document.getElementById('import-export-result'), '配置已导出', 'success');
+                } else {
+                    showResult(document.getElementById('import-export-result'), data.error || '导出失败', 'error');
+                }
+            } catch (error) {
+                showResult(document.getElementById('import-export-result'), '导出失败: ' + error.message, 'error');
+            }
+        }
+
+        // 导入配置
+        async function importConfig() {
+            const fileInput = document.getElementById('config-file-input');
+            if (!fileInput.files[0]) {
+                showResult(document.getElementById('import-export-result'), '请选择文件', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            try {
+                const response = await fetch('/api/config/import', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(document.getElementById('import-export-result'), '配置已导入', 'success');
+                    loadConfig();
+                    loadPrinters();
+                } else {
+                    showResult(document.getElementById('import-export-result'), data.error || '导入失败', 'error');
+                }
+            } catch (error) {
+                showResult(document.getElementById('import-export-result'), '导入失败: ' + error.message, 'error');
+            }
+        }
+
+        // 添加打印机
+        function addPrinter() {
+            document.getElementById('printer-modal-title').textContent = '添加打印机';
+            document.getElementById('printer-index').value = '-1';
+            document.getElementById('printer-form').reset();
+            document.getElementById('printer-port').value = '9100';
+            // 重置扫描结果
+            document.getElementById('printer-scan-result').style.display = 'none';
+            document.getElementById('printer-select').innerHTML = '<option value="">请选择打印机...</option>';
+            document.getElementById('printer-modal').style.display = 'block';
+        }
+
+        // 编辑打印机
+        async function editPrinter(index) {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                const printers = config.printers || [];
+                
+                if (index < 0 || index >= printers.length) {
+                    showResult(document.getElementById('printers-result'), '打印机索引无效', 'error');
+                    return;
+                }
+                
+                const printer = printers[index];
+                document.getElementById('printer-modal-title').textContent = '编辑打印机';
+                document.getElementById('printer-index').value = index;
+                document.getElementById('printer-name').value = printer.name || '';
+                document.getElementById('printer-ip').value = printer.ip || '';
+                document.getElementById('printer-port').value = printer.port || 9100;
+                document.getElementById('printer-device').value = printer.device || '';
+                
+                // 清除所有复选框
+                document.querySelectorAll('input[name="types"]').forEach(cb => cb.checked = false);
+                
+                // 设置选中的类型
+                const types = printer.types || [];
+                types.forEach(type => {
+                    const checkbox = document.querySelector(`input[name="types"][value="${type}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+                
+                document.getElementById('printer-modal').style.display = 'block';
+            } catch (error) {
+                showResult(document.getElementById('printers-result'), '加载打印机信息失败: ' + error.message, 'error');
+            }
+        }
+
+        // 关闭打印机对话框
+        function closePrinterModal() {
+            document.getElementById('printer-modal').style.display = 'none';
+            // 重置表单和扫描结果
+            document.getElementById('printer-form').reset();
+            document.getElementById('printer-port').value = '9100';
+            document.getElementById('printer-scan-result').style.display = 'none';
+            document.getElementById('printer-select').innerHTML = '<option value="">请选择打印机...</option>';
+        }
+
+        // 打印机表单提交
+        document.getElementById('printer-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // 获取选中的类型
+            const selectedTypes = Array.from(document.querySelectorAll('input[name="types"]:checked')).map(cb => cb.value);
+            if (selectedTypes.length === 0) {
+                showResult(document.getElementById('printers-result'), '请至少选择一种支持类型', 'error');
+                return;
+            }
+            
+            const printerData = {
+                name: document.getElementById('printer-name').value,
+                types: selectedTypes,
+                ip: document.getElementById('printer-ip').value || null,
+                port: parseInt(document.getElementById('printer-port').value) || 9100,
+                device: document.getElementById('printer-device').value || null
+            };
+            
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                if (!config.printers) {
+                    config.printers = [];
+                }
+                
+                const index = parseInt(document.getElementById('printer-index').value);
+                if (index >= 0 && index < config.printers.length) {
+                    // 编辑现有打印机
+                    config.printers[index] = printerData;
+                } else {
+                    // 添加新打印机
+                    config.printers.push(printerData);
+                }
+                
+                const saveResponse = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await saveResponse.json();
+                
+                if (data.success) {
+                    showResult(document.getElementById('printers-result'), index >= 0 ? '打印机已更新' : '打印机已添加', 'success');
+                    closePrinterModal();
+                    loadPrinters();
+                    // 刷新状态栏的打印机数量
+                    checkStatus();
+                } else {
+                    showResult(document.getElementById('printers-result'), data.error || '保存失败', 'error');
+                }
+            } catch (error) {
+                showResult(document.getElementById('printers-result'), '保存失败: ' + error.message, 'error');
+            }
+        });
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('printer-modal');
+            if (event.target == modal) {
+                closePrinterModal();
+            }
+        }
+
+        // 扫描打印机
+        async function scanPrinters() {
+            const scanBtn = document.getElementById('scan-btn');
+            const resultDiv = document.getElementById('printer-scan-result');
+            const select = document.getElementById('printer-select');
+            const nameInput = document.getElementById('printer-name');
+            
+            scanBtn.disabled = true;
+            scanBtn.textContent = '扫描中...';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/printers/scan');
+                const data = await response.json();
+                
+                if (data.success && data.printers && data.printers.length > 0) {
+                    // 清空选择框
+                    select.innerHTML = '<option value="">请选择打印机...</option>';
+                    
+                    // 添加打印机选项
+                    data.printers.forEach(printer => {
+                        const option = document.createElement('option');
+                        option.value = printer.name;
+                        option.textContent = printer.name + (printer.is_default ? ' (默认)' : '');
+                        if (printer.is_default) {
+                            option.style.fontWeight = 'bold';
+                        }
+                        select.appendChild(option);
+                    });
+                    
+                    resultDiv.style.display = 'block';
+                    showResult(document.getElementById('printers-result'), `找到 ${data.count} 台打印机`, 'success');
+                } else {
+                    const errorMsg = data.error || '未找到打印机';
+                    showResult(document.getElementById('printers-result'), errorMsg, 'error');
+                    resultDiv.style.display = 'none';
+                }
+            } catch (error) {
+                showResult(document.getElementById('printers-result'), '扫描失败: ' + error.message, 'error');
+                resultDiv.style.display = 'none';
+            } finally {
+                scanBtn.disabled = false;
+                scanBtn.textContent = '扫描打印机';
+            }
+        }
+
+        // 打印机选择改变事件
+        document.getElementById('printer-select').addEventListener('change', function(e) {
+            const selectedName = e.target.value;
+            if (selectedName) {
+                document.getElementById('printer-name').value = selectedName;
+            }
+        });
+
+        // 删除打印机
+        async function deletePrinter(index) {
+            if (!confirm('确定要删除这台打印机吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                config.printers.splice(index, 1);
+                
+                const saveResponse = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await saveResponse.json();
+                
+                if (data.success) {
+                    showResult(document.getElementById('printers-result'), '打印机已删除', 'success');
+                    loadPrinters();
+                } else {
+                    showResult(document.getElementById('printers-result'), data.error || '删除失败', 'error');
+                }
+            } catch (error) {
+                showResult(document.getElementById('printers-result'), '删除失败: ' + error.message, 'error');
+            }
+        }
+
+        // MQTT配置表单提交
+        document.getElementById('mqtt-config-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+                
+                // 更新MQTT配置
+                config.mqtt = {
+                    url: document.getElementById('mqtt-url').value,
+                    topic: document.getElementById('mqtt-topic').value,
+                    username: document.getElementById('mqtt-username').value || null,
+                    password: document.getElementById('mqtt-password').value || null
+                };
+                
+                const saveResponse = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await saveResponse.json();
+                
+                if (data.success) {
+                    const message = data.mqtt_restarted ? 'MQTT配置已保存，客户端已重启' : 'MQTT配置已保存';
+                    showResult(document.getElementById('mqtt-result'), message, 'success');
+                    // 刷新状态
+                    setTimeout(() => {
+                        checkStatus();
+                    }, 1000);
+                } else {
+                    showResult(document.getElementById('mqtt-result'), data.error || '保存失败', 'error');
+                }
+            } catch (error) {
+                showResult(document.getElementById('mqtt-result'), '保存失败: ' + error.message, 'error');
+            }
+        });
+
+        // 文件上传表单处理
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const fileInput = document.getElementById('file-input');
+            const btn = document.getElementById('upload-btn');
+            const resultDiv = document.getElementById('upload-result');
+            
+            if (!fileInput.files[0]) {
+                showResult(resultDiv, '请选择文件', 'error');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.querySelector('.btn-text').style.display = 'none';
+            btn.querySelector('.btn-loading').style.display = 'inline';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/print', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(resultDiv, data.message || '打印任务已发送', 'success');
+                } else {
+                    showResult(resultDiv, data.error || '打印失败', 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, '请求失败: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.querySelector('.btn-text').style.display = 'inline';
+                btn.querySelector('.btn-loading').style.display = 'none';
+            }
+        });
+
+        // JSON表单处理
+        document.getElementById('json-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const jsonInput = document.getElementById('json-input');
+            const btn = document.getElementById('json-btn');
+            const resultDiv = document.getElementById('json-result');
+            
+            let jsonData;
+            try {
+                jsonData = JSON.parse(jsonInput.value);
+            } catch (error) {
+                showResult(resultDiv, 'JSON格式错误: ' + error.message, 'error');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.querySelector('.btn-text').style.display = 'none';
+            btn.querySelector('.btn-loading').style.display = 'inline';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/print/raw', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(jsonData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(resultDiv, data.message || '打印任务已发送', 'success');
+                } else {
+                    showResult(resultDiv, data.error || '打印失败', 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, '请求失败: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.querySelector('.btn-text').style.display = 'inline';
+                btn.querySelector('.btn-loading').style.display = 'none';
+            }
+        });
+
+        // 显示结果消息
+        function showResult(element, message, type) {
+            element.textContent = message;
+            element.className = 'result-message ' + (type === 'success' ? 'result-success' : 'result-error');
+            element.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    element.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        // 加载示例
+        function loadExample(type) {
+            const examples = {
+                zpl: {
+                    "print_type": "label",
+                    "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"
+                },
+                escpos: {
+                    "print_type": "escpos",
+                    "raw_text": "测试小票\\n这是第二行\\n感谢惠顾！"
+                },
+                receipt: {
+                    "print_type": "escpos",
+                    "title": "销售收据",
+                    "items": [
+                        {"name": "商品A", "qty": 2, "price": 10.00},
+                        {"name": "商品B", "qty": 1, "price": 20.00}
+                    ],
+                    "total": 40.00,
+                    "footer": "感谢惠顾"
+                }
+            };
+            
+            if (examples[type]) {
+                document.getElementById('json-input').value = JSON.stringify(examples[type], null, 2);
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+            setInterval(checkStatus, 5000);
+            loadConfig();
+        });
+    </script>
+</body>
+</html>

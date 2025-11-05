@@ -1,0 +1,925 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+打印机Web服务 - FastAPI版本
+提供Web界面用于文件上传和打印测试，同时保留MQTT接收功能
+支持基础认证登录
+"""
+
+import sys
+import os
+import platform
+import threading
+import base64
+import tempfile
+import json
+from typing import Optional
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Depends, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+import uvicorn
+import re
+
+# Windows 控制台编码修复
+if sys.platform == 'win32':
+    import io
+    try:
+        if sys.stdout.encoding != 'utf-8':
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        if sys.stderr.encoding != 'utf-8':
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except:
+        pass
+
+# 添加项目根目录和src目录到路径
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'src'))
+
+from src.config import ConfigManager, create_default_config
+from src.core import LabelPrintMQTT
+from src.core.printer import ZebraPrinter
+from src.core.pdf_printer import PDFPrinter
+from src.core.escpos_printer import ESCPOSPrinter
+from src.core.zpl_generator import ZPLGenerator
+
+# 创建FastAPI应用
+app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
+
+# 静态文件和模板
+static_dir = os.path.join(project_root, 'static')
+templates_dir = os.path.join(project_root, 'templates')
+
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+templates = Jinja2Templates(directory=templates_dir)
+
+# 基础认证
+security = HTTPBasic()
+
+# 全局变量
+mqtt_client = None
+mqtt_thread = None
+config_manager = None
+zpl_generator = ZPLGenerator()
+
+# 允许的文件扩展名
+ALLOWED_EXTENSIONS = {
+    'zpl': 'label',
+    'txt': 'escpos',
+    'pdf': 'pdf',
+    'json': 'label'  # JSON格式的标签数据
+}
+
+# Web认证配置（默认用户名密码，可以从配置文件读取）
+WEB_USERNAME = os.getenv('WEB_USERNAME', 'admin')
+WEB_PASSWORD = os.getenv('WEB_PASSWORD', 'admin123')
+
+
+def ensure_directories():
+    """确保所有必要的目录存在"""
+    directories = [
+        'config',
+        'data/logs',
+        'data/failed_labels',
+        'data/uploads',
+        'templates',
+        'static'
+    ]
+    
+    for directory in directories:
+        try:
+            os.makedirs(directory, exist_ok=True)
+        except Exception as e:
+            print(f"警告：无法创建目录 {directory}: {e}")
+
+
+def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
+    """验证用户凭证"""
+    global config_manager
+    
+    # 尝试从配置文件读取用户名密码
+    if config_manager is None:
+        config_manager = ConfigManager('config/printer_config.json')
+    
+    config = config_manager.load()
+    web_config = config.get('web', {})
+    
+    username = web_config.get('username', WEB_USERNAME)
+    password = web_config.get('password', WEB_PASSWORD)
+    
+    if credentials.username != username or credentials.password != password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+
+def allowed_file(filename):
+    """检查文件扩展名是否允许"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def secure_filename(filename):
+    """
+    安全的文件名处理函数（替代werkzeug的secure_filename）
+    移除或替换文件名中的不安全字符
+    """
+    # 保留文件名和扩展名
+    if '.' in filename:
+        name, ext = filename.rsplit('.', 1)
+    else:
+        name, ext = filename, ''
+    
+    # 移除不安全字符，只保留字母、数字、下划线、连字符和点
+    name = re.sub(r'[^\w\-_.]', '_', name)
+    
+    # 移除连续的下划线
+    name = re.sub(r'_+', '_', name)
+    
+    # 移除开头和结尾的下划线和连字符
+    name = name.strip('_-')
+    
+    # 如果名称为空，使用默认名称
+    if not name:
+        name = 'file'
+    
+    # 重新组合文件名
+    if ext:
+        return f"{name}.{ext}"
+    return name
+
+
+def get_print_type_from_filename(filename):
+    """根据文件名推断打印类型"""
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    return ALLOWED_EXTENSIONS.get(ext, 'label')
+
+
+def stop_mqtt_client():
+    """停止MQTT客户端"""
+    global mqtt_client, mqtt_thread
+    
+    if mqtt_client and mqtt_client.client:
+        try:
+            mqtt_client.client.loop_stop()
+            mqtt_client.client.disconnect()
+        except:
+            pass
+    
+    # 等待线程结束
+    if mqtt_thread and mqtt_thread.is_alive():
+        import time
+        mqtt_thread.join(timeout=2)
+    
+    mqtt_client = None
+    mqtt_thread = None
+
+
+def start_mqtt_client():
+    """在后台线程中启动MQTT客户端"""
+    global mqtt_client, mqtt_thread, config_manager
+    
+    # 先停止旧的客户端（如果存在）
+    stop_mqtt_client()
+    
+    try:
+        # 确保config_manager已初始化
+        if config_manager is None:
+            config_manager = ConfigManager('config/printer_config.json')
+        
+        # 加载配置
+        config = config_manager.load()
+        mqtt_config = config_manager.get_mqtt_config()
+        printers_config = config.get('printers', [])
+        printer_config = config.get('printer')
+        
+        # 创建MQTT客户端
+        mqtt_client = LabelPrintMQTT(
+            broker_host=mqtt_config.get('host', '127.0.0.1'),
+            broker_port=mqtt_config.get('port', 1883),
+            topic=mqtt_config.get('topic', 'zebra/print'),
+            username=mqtt_config.get('username'),
+            password=mqtt_config.get('password'),
+            protocol=mqtt_config.get('protocol'),
+            url=mqtt_config.get('url'),
+            printer_config=printer_config,
+            printers_config=printers_config
+        )
+        
+        # 在后台线程中启动
+        mqtt_thread = threading.Thread(target=mqtt_client.start, daemon=True)
+        mqtt_thread.start()
+        
+        print("✓ MQTT客户端已在后台启动")
+        return True
+        
+    except Exception as e:
+        print(f"✗ MQTT客户端启动失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def get_printer_instance(print_type, printer_config=None):
+    """
+    根据打印类型获取打印机实例
+    
+    Args:
+        print_type: 打印类型 ('label', 'pdf', 'receipt', 'escpos')
+        printer_config: 打印机配置（可选）
+        
+    Returns:
+        打印机实例
+    """
+    global config_manager
+    if config_manager is None:
+        config_manager = ConfigManager('config/printer_config.json')
+    config = config_manager.load()
+    printers_config = config.get('printers', [])
+    
+    # 如果提供了打印机配置，使用它
+    if printer_config:
+        if print_type == 'label':
+            return ZebraPrinter(
+                printer_name=printer_config.get('name'),
+                printer_ip=printer_config.get('ip'),
+                printer_port=printer_config.get('port', 9100),
+                device_path=printer_config.get('device')
+            )
+        elif print_type == 'pdf':
+            return PDFPrinter(printer_name=printer_config.get('name'))
+        elif print_type in ['receipt', 'escpos']:
+            return ESCPOSPrinter(
+                printer_ip=printer_config.get('ip'),
+                printer_port=printer_config.get('port', 9100),
+                printer_name=printer_config.get('name'),
+                device_path=printer_config.get('device')
+            )
+    
+    # 否则从配置中查找
+    # 优先查找专用打印机
+    for printer_cfg in printers_config:
+        types = printer_cfg.get('types', [])
+        if print_type in types:
+            if print_type == 'label':
+                return ZebraPrinter(
+                    printer_name=printer_cfg.get('name'),
+                    printer_ip=printer_cfg.get('ip'),
+                    printer_port=printer_cfg.get('port', 9100),
+                    device_path=printer_cfg.get('device')
+                )
+            elif print_type == 'pdf':
+                return PDFPrinter(printer_name=printer_cfg.get('name'))
+            elif print_type in ['receipt', 'escpos']:
+                return ESCPOSPrinter(
+                    printer_ip=printer_cfg.get('ip'),
+                    printer_port=printer_cfg.get('port', 9100),
+                    printer_name=printer_cfg.get('name'),
+                    device_path=printer_cfg.get('device')
+                )
+    
+    # 查找通用打印机（types: ["*"]）
+    for printer_cfg in printers_config:
+        types = printer_cfg.get('types', [])
+        if '*' in types:
+            if print_type == 'label':
+                return ZebraPrinter(
+                    printer_name=printer_cfg.get('name'),
+                    printer_ip=printer_cfg.get('ip'),
+                    printer_port=printer_cfg.get('port', 9100),
+                    device_path=printer_cfg.get('device')
+                )
+            elif print_type == 'pdf':
+                return PDFPrinter(printer_name=printer_cfg.get('name'))
+            elif print_type in ['receipt', 'escpos']:
+                return ESCPOSPrinter(
+                    printer_ip=printer_cfg.get('ip'),
+                    printer_port=printer_cfg.get('port', 9100),
+                    printer_name=printer_cfg.get('name'),
+                    device_path=printer_cfg.get('device')
+                )
+    
+    # 使用默认配置
+    printer_config = config.get('printer', {})
+    if print_type == 'label':
+        return ZebraPrinter(
+            printer_name=printer_config.get('name'),
+            printer_ip=printer_config.get('ip'),
+            printer_port=printer_config.get('port', 9100),
+            device_path=printer_config.get('device')
+        )
+    elif print_type == 'pdf':
+        return PDFPrinter(printer_name=printer_config.get('name'))
+    elif print_type in ['receipt', 'escpos']:
+        return ESCPOSPrinter(
+            printer_ip=printer_config.get('ip'),
+            printer_port=printer_config.get('port', 9100),
+            printer_name=printer_config.get('name'),
+            device_path=printer_config.get('device')
+        )
+    
+    return None
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request, username: str = Depends(verify_credentials)):
+    """首页（需要认证）"""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.post("/api/print")
+async def print_file(
+    file: UploadFile = File(...),
+    print_type: Optional[str] = Form(None),
+    username: str = Depends(verify_credentials)
+):
+    """处理文件打印请求"""
+    try:
+        # 检查文件
+        if not file.filename:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "未选择文件"}
+            )
+        
+        # 获取打印类型
+        if not print_type:
+            print_type = get_print_type_from_filename(file.filename)
+        else:
+            print_type = print_type.lower()
+        
+        # 验证文件类型
+        if not allowed_file(file.filename):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f'不支持的文件类型。支持的类型: {", ".join(ALLOWED_EXTENSIONS.keys())}'}
+            )
+        
+        # 保存上传的文件
+        filename = secure_filename(file.filename)
+        filepath = os.path.join('data/uploads', filename)
+        os.makedirs('data/uploads', exist_ok=True)
+        
+        with open(filepath, 'wb') as f:
+            content = await file.read()
+            f.write(content)
+        
+        # 读取文件内容
+        with open(filepath, 'rb') as f:
+            file_content = f.read()
+        
+        # 根据打印类型处理
+        success = False
+        error_msg = None
+        
+        if print_type == 'label':
+            # ZPL标签打印
+            if filename.endswith('.zpl'):
+                zpl_code = file_content.decode('utf-8', errors='ignore')
+            elif filename.endswith('.json'):
+                # JSON格式的标签数据
+                try:
+                    data = json.loads(file_content.decode('utf-8'))
+                    zpl_code = zpl_generator.generate_label_zpl(data)
+                except Exception as e:
+                    error_msg = f'JSON解析失败: {e}'
+                    os.remove(filepath)
+                    return JSONResponse(
+                        status_code=400,
+                        content={"success": False, "error": error_msg}
+                    )
+            else:
+                # 将文本内容作为ZPL代码
+                zpl_code = file_content.decode('utf-8', errors='ignore')
+            
+            printer = get_printer_instance('label')
+            if not printer:
+                os.remove(filepath)
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": "未配置标签打印机"}
+                )
+            
+            success = printer.print_label(zpl_code)
+            if not success:
+                error_msg = '标签打印失败'
+        
+        elif print_type == 'pdf':
+            # PDF打印
+            printer = get_printer_instance('pdf')
+            if not printer:
+                os.remove(filepath)
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": "未配置PDF打印机"}
+                )
+            
+            # 将文件内容编码为base64
+            pdf_base64 = base64.b64encode(file_content).decode('utf-8')
+            
+            success = printer.print_pdf(pdf_base64, None)
+            if not success:
+                error_msg = 'PDF打印失败'
+        
+        elif print_type in ['receipt', 'escpos']:
+            # ESC/POS小票打印
+            printer = get_printer_instance('receipt')
+            if not printer:
+                os.remove(filepath)
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": "未配置ESC/POS打印机"}
+                )
+            
+            # 读取文本内容
+            text_content = file_content.decode('utf-8', errors='ignore')
+            
+            # 构建打印数据
+            receipt_data = {
+                'raw_text': text_content,
+                'encoding': 'utf-8'
+            }
+            
+            success = printer.print_receipt(receipt_data)
+            if not success:
+                error_msg = 'ESC/POS打印失败'
+        
+        else:
+            os.remove(filepath)
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f'不支持的打印类型: {print_type}'}
+            )
+        
+        # 清理临时文件
+        try:
+            os.remove(filepath)
+        except:
+            pass
+        
+        if success:
+            return JSONResponse({
+                "success": True,
+                "message": f'{print_type.upper()}打印任务已发送',
+                "print_type": print_type
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": error_msg or "打印失败"}
+            )
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'处理请求时出错: {str(e)}'}
+        )
+
+
+@app.post("/api/print/raw")
+async def print_raw(
+    request: Request,
+    username: str = Depends(verify_credentials)
+):
+    """处理原始数据打印请求（JSON格式）"""
+    try:
+        data = await request.json()
+        if not data:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的JSON数据"}
+            )
+        
+        print_type = data.get('print_type', 'label').lower()
+        
+        # 获取打印机实例
+        printer = get_printer_instance(print_type)
+        if not printer:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f'未配置{print_type}打印机'}
+            )
+        
+        success = False
+        
+        if print_type == 'label':
+            # ZPL标签打印
+            if 'zpl_code' in data:
+                zpl_code = data['zpl_code']
+            else:
+                # 自动生成ZPL
+                zpl_code = zpl_generator.generate_label_zpl(data)
+            success = printer.print_label(zpl_code)
+        
+        elif print_type == 'pdf':
+            # PDF打印
+            pdf_data = data.get('pdf_data') or data.get('pdf_file')
+            if not pdf_data:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": "缺少PDF数据"}
+                )
+            printer_name = data.get('printer')
+            success = printer.print_pdf(pdf_data, printer_name)
+        
+        elif print_type in ['receipt', 'escpos']:
+            # ESC/POS小票打印
+            success = printer.print_receipt(data)
+        
+        else:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f'不支持的打印类型: {print_type}'}
+            )
+        
+        if success:
+            return JSONResponse({
+                "success": True,
+                "message": f'{print_type.upper()}打印任务已发送'
+            })
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": "打印失败"}
+            )
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'处理请求时出错: {str(e)}'}
+        )
+
+
+@app.get("/api/status")
+async def get_status(username: str = Depends(verify_credentials)):
+    """获取服务状态"""
+    global config_manager, mqtt_client, mqtt_thread
+    if config_manager is None:
+        config_manager = ConfigManager('config/printer_config.json')
+    config = config_manager.load()
+    mqtt_config = config_manager.get_mqtt_config()
+    printers_config = config.get('printers', [])
+    
+    # 检查MQTT连接状态
+    mqtt_status = 'stopped'
+    mqtt_error = None
+    
+    if mqtt_client and mqtt_thread and mqtt_thread.is_alive():
+        # 优先使用客户端内部的连接状态标记
+        if hasattr(mqtt_client, 'is_connected'):
+            if mqtt_client.is_connected:
+                mqtt_status = 'running'
+            else:
+                # 线程存活但未连接，可能是连接失败或正在连接
+                if mqtt_client.client:
+                    # 客户端对象已创建，可能是连接失败
+                    mqtt_status = 'stopped'
+                    if hasattr(mqtt_client, 'connection_error') and mqtt_client.connection_error:
+                        mqtt_error = mqtt_client.connection_error
+                else:
+                    # 客户端对象未创建，可能是正在初始化
+                    mqtt_status = 'connecting'
+        else:
+            # 如果没有连接状态标记，使用fallback检查
+            if mqtt_client.client:
+                try:
+                    # 检查连接状态（is_connected()是paho-mqtt的方法）
+                    if hasattr(mqtt_client.client, 'is_connected'):
+                        if mqtt_client.client.is_connected():
+                            mqtt_status = 'running'
+                    else:
+                        # 如果没有is_connected方法，检查_sock属性（内部状态）
+                        if hasattr(mqtt_client.client, '_sock') and mqtt_client.client._sock:
+                            mqtt_status = 'running'
+                        elif hasattr(mqtt_client.client, '_state') and mqtt_client.client._state == 1:
+                            # MQTT状态: 1 = connected
+                            mqtt_status = 'running'
+                        else:
+                            # 线程存活但可能连接失败，标记为连接中
+                            mqtt_status = 'connecting'
+                except:
+                    # 如果检查失败，假设未连接
+                    mqtt_status = 'stopped'
+            else:
+                # 客户端存在但client对象未创建，可能是初始化失败
+                mqtt_status = 'stopped'
+    else:
+        # 线程不存在或已停止
+        mqtt_status = 'stopped'
+    
+    mqtt_info = {
+        "status": mqtt_status,
+        "host": mqtt_config.get('host', '127.0.0.1'),
+        "port": mqtt_config.get('port', 1883),
+        "topic": mqtt_config.get('topic', 'zebra/print')
+    }
+    
+    if mqtt_error:
+        mqtt_info["error"] = mqtt_error
+    
+    return JSONResponse({
+        "mqtt": mqtt_info,
+        "printers": {
+            "count": len(printers_config),
+            "configs": printers_config
+        }
+    })
+
+
+@app.get("/api/config")
+async def get_config(username: str = Depends(verify_credentials)):
+    """获取配置信息"""
+    global config_manager
+    if config_manager is None:
+        config_manager = ConfigManager('config/printer_config.json')
+    config = config_manager.load()
+    # 不返回密码等敏感信息
+    safe_config = config.copy()
+    if 'web' in safe_config and 'password' in safe_config['web']:
+        safe_config['web']['password'] = '***'
+    if 'mqtt' in safe_config and 'password' in safe_config['mqtt']:
+        safe_config['mqtt']['password'] = '***'
+    return JSONResponse(safe_config)
+
+
+@app.post("/api/config/save")
+async def save_config(
+    request: Request,
+    username: str = Depends(verify_credentials)
+):
+    """保存配置信息"""
+    global config_manager, mqtt_client
+    try:
+        if config_manager is None:
+            config_manager = ConfigManager('config/printer_config.json')
+        
+        # 保存旧的MQTT配置用于比较
+        old_config = config_manager.load()
+        old_mqtt_config = config_manager.get_mqtt_config()
+        
+        data = await request.json()
+        if not data:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的配置数据"}
+            )
+        
+        # 保存配置到文件
+        config_file = 'config/printer_config.json'
+        os.makedirs(os.path.dirname(config_file), exist_ok=True)
+        
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        # 重新加载配置
+        config_manager = ConfigManager(config_file)
+        new_mqtt_config = config_manager.get_mqtt_config()
+        
+        # 检查MQTT配置是否改变
+        mqtt_changed = False
+        if old_mqtt_config.get('url') != new_mqtt_config.get('url') or \
+           old_mqtt_config.get('host') != new_mqtt_config.get('host') or \
+           old_mqtt_config.get('port') != new_mqtt_config.get('port') or \
+           old_mqtt_config.get('topic') != new_mqtt_config.get('topic') or \
+           old_mqtt_config.get('username') != new_mqtt_config.get('username') or \
+           old_mqtt_config.get('password') != new_mqtt_config.get('password'):
+            mqtt_changed = True
+        
+        # 如果修改了MQTT配置，需要重启MQTT客户端
+        if mqtt_changed:
+            print("检测到MQTT配置已更改，正在重启MQTT客户端...")
+            start_mqtt_client()
+            message = "配置已保存，MQTT客户端已重启"
+        else:
+            message = "配置已保存"
+        
+        return JSONResponse({
+            "success": True,
+            "message": message,
+            "mqtt_restarted": mqtt_changed
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'保存配置失败: {str(e)}'}
+        )
+
+
+@app.post("/api/config/import")
+async def import_config(
+    file: UploadFile = File(...),
+    username: str = Depends(verify_credentials)
+):
+    """导入配置文件"""
+    global config_manager
+    try:
+        if not file.filename.endswith('.json'):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "只支持JSON格式的配置文件"}
+            )
+        
+        # 读取上传的文件
+        content = await file.read()
+        config_data = json.loads(content.decode('utf-8'))
+        
+        # 验证配置格式
+        if not isinstance(config_data, dict):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "配置文件格式错误"}
+            )
+        
+        # 保存配置
+        config_file = 'config/printer_config.json'
+        os.makedirs(os.path.dirname(config_file), exist_ok=True)
+        
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, ensure_ascii=False, indent=2)
+        
+        # 重新加载配置
+        config_manager = ConfigManager(config_file)
+        
+        return JSONResponse({
+            "success": True,
+            "message": "配置已导入",
+            "config": config_data
+        })
+    
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "JSON格式错误"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'导入配置失败: {str(e)}'}
+        )
+
+
+@app.get("/api/config/export")
+async def export_config(username: str = Depends(verify_credentials)):
+    """导出配置文件"""
+    global config_manager
+    try:
+        if config_manager is None:
+            config_manager = ConfigManager('config/printer_config.json')
+        
+        config = config_manager.load()
+        
+        return JSONResponse({
+            "success": True,
+            "config": config,
+            "filename": "printer_config.json"
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'导出配置失败: {str(e)}'}
+        )
+
+
+@app.get("/api/printers/scan")
+async def scan_printers(username: str = Depends(verify_credentials)):
+    """扫描系统打印机列表"""
+    import platform
+    system = platform.system()
+    printers = []
+    
+    try:
+        if system == 'Windows':
+            try:
+                import win32print
+                default_printer = None
+                try:
+                    default_printer = win32print.GetDefaultPrinter()
+                except:
+                    pass
+                
+                for printer_info in win32print.EnumPrinters(2):
+                    printer_name = printer_info[2]
+                    printers.append({
+                        'name': printer_name,
+                        'is_default': printer_name == default_printer,
+                        'type': 'windows'
+                    })
+                
+            except ImportError:
+                return JSONResponse({
+                    "success": False,
+                    "error": "需要安装 pywin32 库: pip install pywin32",
+                    "printers": []
+                })
+            except Exception as e:
+                return JSONResponse({
+                    "success": False,
+                    "error": f"获取Windows打印机列表失败: {str(e)}",
+                    "printers": []
+                })
+        
+        elif system == 'Linux':
+            try:
+                import cups
+                conn = cups.Connection()
+                cups_printers = conn.getPrinters()
+                default_printer = conn.getDefault()
+                
+                for printer_name, printer_info in cups_printers.items():
+                    printers.append({
+                        'name': printer_name,
+                        'is_default': printer_name == default_printer,
+                        'type': 'cups',
+                        'info': printer_info.get('printer-info', ''),
+                        'location': printer_info.get('printer-location', '')
+                    })
+                
+            except ImportError:
+                return JSONResponse({
+                    "success": False,
+                    "error": "需要安装 pycups 库: pip install pycups",
+                    "printers": []
+                })
+            except Exception as e:
+                return JSONResponse({
+                    "success": False,
+                    "error": f"获取CUPS打印机列表失败: {str(e)}",
+                    "printers": []
+                })
+        
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": f"不支持的操作系统: {system}",
+                "printers": []
+            })
+        
+        return JSONResponse({
+            "success": True,
+            "printers": printers,
+            "count": len(printers)
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'扫描打印机失败: {str(e)}', "printers": []}
+        )
+
+
+if __name__ == '__main__':
+    # 确保目录存在
+    ensure_directories()
+    
+    # 检查配置文件
+    config_file = 'config/printer_config.json'
+    if not os.path.exists(config_file):
+        print(f"配置文件不存在，正在创建默认配置...")
+        create_default_config(config_file)
+    
+    # 初始化配置管理器（如果还未初始化）
+    if config_manager is None:
+        config_manager = ConfigManager(config_file)
+    
+    # 启动MQTT客户端（后台）
+    print("=" * 70)
+    print(" " * 20 + "打印机Web服务")
+    print("=" * 70)
+    print(f"系统: {platform.system()} {platform.machine()}")
+    print(f"Python: {sys.version.split()[0]}")
+    print("=" * 70)
+    print()
+    
+    start_mqtt_client()
+    
+    print("\n" + "=" * 70)
+    print("Web服务启动中...")
+    print("访问地址: http://127.0.0.1:5000")
+    print("=" * 70)
+    print()
+    
+    # 启动FastAPI应用
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")
+    except KeyboardInterrupt:
+        print("\n\nWeb服务已停止")

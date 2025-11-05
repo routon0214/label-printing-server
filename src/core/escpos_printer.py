@@ -8,6 +8,7 @@ ESC/POS打印机模块
 import os
 import platform
 import socket
+import codecs
 
 
 class ESCPOSPrinter:
@@ -61,6 +62,8 @@ class ESCPOSPrinter:
         
         Args:
             receipt_data: 小票数据字典
+                支持两种格式：
+                1. 结构化格式:
                 {
                     "title": "收据标题",
                     "items": [
@@ -71,10 +74,46 @@ class ESCPOSPrinter:
                     "footer": "感谢惠顾",
                     "barcode": "1234567890"  # 可选
                 }
+                2. 原始文本格式:
+                {
+                    "raw_text": "原始文本内容\\n换行",
+                    "encoding": "utf-8"  # 可选，默认utf-8
+                }
                 
         Returns:
             bool: 是否成功
         """
+        # 如果包含 raw_text 字段，直接打印原始文本
+        if 'raw_text' in receipt_data:
+            raw_text = receipt_data.get('raw_text', '')
+            encoding = receipt_data.get('encoding', 'utf-8')
+            
+            # 处理转义字符（如 \\n 转换为实际的换行符）
+            # JSON解析后，\\n 会被解析为字符串 \n（单个反斜杠+n），需要转换为实际的换行符
+            try:
+                # 使用 codecs.decode 处理转义序列（如 \n, \t 等）
+                raw_text = codecs.decode(raw_text, 'unicode_escape')
+            except Exception:
+                # 如果解码失败，使用原始文本
+                pass
+            
+            # 将文本转换为字节
+            try:
+                text_bytes = raw_text.encode(encoding)
+            except (UnicodeEncodeError, LookupError):
+                # 如果编码失败，尝试使用utf-8
+                text_bytes = raw_text.encode('utf-8', errors='ignore')
+            
+            # 生成ESC/POS指令（初始化 + 文本内容）
+            commands = bytearray()
+            commands.extend(self.CMD_INIT)  # 初始化打印机
+            commands.extend(text_bytes)  # 添加文本内容
+            commands.extend(self.LF * 2)  # 添加换行
+            
+            # 发送到打印机
+            return self.send_commands(bytes(commands))
+        
+        # 否则使用结构化格式
         # 生成ESC/POS指令
         commands = self.generate_receipt_commands(receipt_data)
         

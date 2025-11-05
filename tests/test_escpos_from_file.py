@@ -55,7 +55,7 @@ def parse_print_commands(text):
         
     Returns:
         dict: 解析后的打印数据
-    """
+    """ 
     # 提取TEXT命令中的文本内容
     text_lines = []
     qrcode_data = None
