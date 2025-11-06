@@ -13,6 +13,8 @@ import sys
 import platform
 import shutil
 import subprocess
+import zipfile
+from datetime import datetime
 
 # Windows 控制台编码修复
 if sys.platform == 'win32':
@@ -369,6 +371,53 @@ except Exception as e:
     print(f"  ✓ 创建 {test_script}")
 
 
+def create_zip_package():
+    """将打包好的程序压缩成zip文件"""
+    print_section("创建ZIP压缩包")
+    
+    dist_dir = 'dist/label-printing-server'
+    
+    if not os.path.exists(dist_dir):
+        print("✗ 找不到打包目录，无法创建ZIP")
+        return False
+    
+    # 生成带时间戳的zip文件名
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    system_name = platform.system().lower()
+    zip_filename = f'dist/label-printing-server_{system_name}_{timestamp}.zip'
+    
+    # 也创建一个不带时间戳的版本（覆盖旧版本）
+    zip_filename_simple = f'dist/label-printing-server.zip'
+    
+    print(f"\n正在压缩 {dist_dir} ...")
+    
+    try:
+        # 创建zip文件
+        with zipfile.ZipFile(zip_filename_simple, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # 遍历目录
+            for root, dirs, files in os.walk(dist_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # 计算相对路径
+                    arcname = os.path.relpath(file_path, 'dist')
+                    zipf.write(file_path, arcname)
+                    
+        # 复制一份带时间戳的
+        shutil.copy2(zip_filename_simple, zip_filename)
+        
+        # 获取文件大小
+        zip_size = os.path.getsize(zip_filename_simple) / (1024 * 1024)
+        
+        print(f"  ✓ 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
+        print(f"  ✓ 备份版本: {zip_filename}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"  ✗ 创建ZIP失败: {e}")
+        return False
+
+
 def main():
     """主函数"""
     print("\n" + "=" * 70)
@@ -409,6 +458,9 @@ def main():
         # 创建测试脚本
         create_test_script()
         
+        # 创建ZIP压缩包
+        zip_created = create_zip_package()
+        
         print("\n" + "=" * 70)
         print("完成！")
         print("=" * 70)
@@ -425,6 +477,11 @@ def main():
         print("     python test_jinja2.py")
         print("\n  3. 访问 Web 界面:")
         print("     http://127.0.0.1:5000")
+        
+        if zip_created:
+            print("\n  4. 部署ZIP包:")
+            print("     dist/label-printing-server.zip")
+        
         print("=" * 70)
         
         input("\n按回车键退出...")

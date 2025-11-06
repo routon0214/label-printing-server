@@ -10,6 +10,8 @@ import sys
 import platform
 import shutil
 import subprocess
+import zipfile
+from datetime import datetime
 
 # Windows 控制台编码修复
 if sys.platform == 'win32':
@@ -369,6 +371,58 @@ def copy_resources():
     print(f"[OK] 已创建必要的目录结构")
 
 
+def create_zip_package():
+    """将打包好的程序压缩成zip文件"""
+    print("\n" + "=" * 70)
+    print("创建ZIP压缩包")
+    print("=" * 70)
+    
+    dist_dir = 'dist'
+    
+    if not os.path.exists(dist_dir):
+        print("✗ 找不到dist目录，无法创建ZIP")
+        return False
+    
+    # 生成带时间戳的zip文件名
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    system_name = platform.system().lower()
+    zip_filename = f'dist/label-printing-server_{system_name}_{timestamp}.zip'
+    
+    # 也创建一个不带时间戳的版本（覆盖旧版本）
+    zip_filename_simple = f'dist/label-printing-server.zip'
+    
+    print(f"\n正在压缩 {dist_dir} 目录...")
+    
+    try:
+        # 创建zip文件
+        with zipfile.ZipFile(zip_filename_simple, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # 遍历dist目录
+            for root, dirs, files in os.walk(dist_dir):
+                for file in files:
+                    # 跳过zip文件本身
+                    if file.endswith('.zip'):
+                        continue
+                    file_path = os.path.join(root, file)
+                    # 计算相对路径（相对于dist的父目录）
+                    arcname = os.path.relpath(file_path, os.path.dirname(dist_dir))
+                    zipf.write(file_path, arcname)
+                    
+        # 复制一份带时间戳的
+        shutil.copy2(zip_filename_simple, zip_filename)
+        
+        # 获取文件大小
+        zip_size = os.path.getsize(zip_filename_simple) / (1024 * 1024)
+        
+        print(f"  ✓ 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
+        print(f"  ✓ 备份版本: {zip_filename}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"  ✗ 创建ZIP失败: {e}")
+        return False
+
+
 def wait_for_exit():
     """等待用户按键退出"""
     try:
@@ -400,6 +454,9 @@ def main():
         # 创建README
         create_readme()
         
+        # 创建ZIP压缩包
+        zip_created = create_zip_package()
+        
         system, machine = get_platform_info()
         exe_name = 'label-printing-server.exe' if system == 'Windows' else 'label-printing-server'
         print("\n" + "=" * 70)
@@ -407,6 +464,10 @@ def main():
         print("=" * 70)
         print(f"\n可执行文件位置: dist/{exe_name}")
         print(f"平台: {system} {machine}")
+        
+        if zip_created:
+            print(f"\nZIP压缩包: dist/label-printing-server.zip")
+        
         print("\n下一步:")
         print("  1. [推荐] 验证依赖是否完整:")
         print("     python scripts/verify_dependencies.py")
@@ -416,6 +477,11 @@ def main():
         print("     编辑 dist/config/printer_config.json")
         print("  4. 访问Web界面:")
         print("     http://127.0.0.1:5000")
+        
+        if zip_created:
+            print("  5. 部署ZIP包:")
+            print("     dist/label-printing-server.zip")
+        
         print("\n如果遇到 'jinja2 must be installed' 错误:")
         print("  检查上面的打包日志，确保所有模块都被正确包含")
         print("\n" + "=" * 70)

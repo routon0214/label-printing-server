@@ -459,12 +459,28 @@ async def print_file(
         if print_type == 'label':
             # ZPL标签打印
             if filename.endswith('.zpl'):
-                zpl_code = file_content.decode('utf-8', errors='ignore')
+                # 尝试使用UTF-8解码，如果失败则尝试其他编码
+                try:
+                    zpl_code = file_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        zpl_code = file_content.decode('gbk')
+                        print(f"警告: ZPL文件使用GBK编码解码")
+                    except:
+                        zpl_code = file_content.decode('utf-8', errors='replace')
+                        print(f"警告: ZPL文件包含无法解码的字符，已替换")
             elif filename.endswith('.json'):
                 # JSON格式的标签数据
                 try:
                     data = json.loads(file_content.decode('utf-8'))
                     zpl_code = zpl_generator.generate_label_zpl(data)
+                except UnicodeDecodeError:
+                    error_msg = 'JSON文件编码错误，请确保使用UTF-8编码保存'
+                    os.remove(filepath)
+                    return JSONResponse(
+                        status_code=400,
+                        content={"success": False, "error": error_msg}
+                    )
                 except Exception as e:
                     error_msg = f'JSON解析失败: {e}'
                     os.remove(filepath)
@@ -474,7 +490,15 @@ async def print_file(
                     )
             else:
                 # 将文本内容作为ZPL代码
-                zpl_code = file_content.decode('utf-8', errors='ignore')
+                try:
+                    zpl_code = file_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    try:
+                        zpl_code = file_content.decode('gbk')
+                        print(f"警告: 文件使用GBK编码解码")
+                    except:
+                        zpl_code = file_content.decode('utf-8', errors='replace')
+                        print(f"警告: 文件包含无法解码的字符，已替换")
             
             printer = get_printer_instance('label')
             if not printer:
@@ -516,12 +540,21 @@ async def print_file(
                 )
             
             # 读取文本内容
-            text_content = file_content.decode('utf-8', errors='ignore')
+            try:
+                text_content = file_content.decode('utf-8')
+            except UnicodeDecodeError:
+                try:
+                    text_content = file_content.decode('gbk')
+                    print(f"警告: 文件使用GBK编码解码")
+                except:
+                    text_content = file_content.decode('utf-8', errors='replace')
+                    print(f"警告: 文件包含无法解码的字符，已替换")
             
             # 构建打印数据
+            # 注意：ESC/POS打印机推荐使用 gb2312 编码以正确显示中文
             receipt_data = {
                 'raw_text': text_content,
-                'encoding': 'utf-8'
+                'encoding': 'gb2312'  # 使用gb2312编码避免中文乱码
             }
             
             success = printer.print_receipt(receipt_data)
