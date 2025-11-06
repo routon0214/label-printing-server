@@ -2,8 +2,18 @@
   "mqtt": {
     "url": "tcp://10.100.10.121:1883",
     "topic": "zebra/print",
-    "username": null,
-    "password": null
+    "username": "admin",
+    "password": null,
+    "client_id": null
+  },
+  "web": {
+    "username": "admin",
+    "password": "admin",
+    "_comment": {
+      "username": "Web界面登录用户名",
+      "password": "Web界面登录密码",
+      "说明": "建议修改默认密码以确保安全"
+    }
   },
   "printers": [
     {

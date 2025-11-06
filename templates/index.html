@@ -155,6 +155,11 @@
                                 <input type="password" id="mqtt-password" name="password" placeholder="可选">
                             </div>
                             <div class="form-group">
+                                <label for="mqtt-client-id">客户端ID:</label>
+                                <input type="text" id="mqtt-client-id" name="client_id" placeholder="留空则自动生成随机ID">
+                                <small>如果为空，系统会自动生成随机ID（格式：label_print_随机字符串）</small>
+                            </div>
+                            <div class="form-group">
                                 <button type="submit" class="btn btn-primary">保存MQTT配置</button>
                                 <button type="button" class="btn btn-secondary" onclick="loadConfig()">重新加载</button>
                             </div>
@@ -362,12 +367,18 @@
                     errorHtml = `<p><strong>错误信息:</strong> <span class="status-error">${data.mqtt.error}</span></p>`;
                 }
                 
+                let clientIdHtml = '';
+                if (data.mqtt.client_id) {
+                    clientIdHtml = `<p><strong>客户端ID:</strong> ${data.mqtt.client_id}</p>`;
+                }
+                
                 const statusHtml = `
                     <div class="status-detail">
                         <h3>MQTT连接信息</h3>
                         <p><strong>状态:</strong> <span class="${statusClass}">${statusText}</span></p>
                         <p><strong>服务器:</strong> ${data.mqtt.host}:${data.mqtt.port}</p>
                         <p><strong>主题:</strong> ${data.mqtt.topic}</p>
+                        ${clientIdHtml}
                         ${errorHtml}
                     </div>
                 `;
@@ -422,6 +433,7 @@
                     document.getElementById('mqtt-url').value = data.mqtt.url || '';
                     document.getElementById('mqtt-topic').value = data.mqtt.topic || '';
                     document.getElementById('mqtt-username').value = data.mqtt.username || '';
+                    document.getElementById('mqtt-client-id').value = data.mqtt.client_id || '';
                     // 密码字段不填充（显示为***）
                 }
             } catch (error) {
@@ -739,11 +751,13 @@
                 const config = await response.json();
                 
                 // 更新MQTT配置
+                const clientIdValue = document.getElementById('mqtt-client-id').value.trim();
                 config.mqtt = {
                     url: document.getElementById('mqtt-url').value,
                     topic: document.getElementById('mqtt-topic').value,
                     username: document.getElementById('mqtt-username').value || null,
-                    password: document.getElementById('mqtt-password').value || null
+                    password: document.getElementById('mqtt-password').value || null,
+                    client_id: clientIdValue || null  // 如果为空字符串，设为null（自动生成）
                 };
                 
                 const saveResponse = await fetch('/api/config/save', {

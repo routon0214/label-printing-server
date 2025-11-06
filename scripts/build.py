@@ -36,12 +36,19 @@ def get_platform_info():
 
 
 def clean_build_dirs():
-    """清理构建目录"""
+    """清理构建目录和旧的 spec 文件"""
     dirs_to_clean = ['build', 'dist/']
     for dir_name in dirs_to_clean:
         if os.path.exists(dir_name):
             print(f"清理目录: {dir_name}")
             shutil.rmtree(dir_name)
+    
+    # 清理旧的 spec 文件
+    spec_files = ['label-printing-server.spec', 'app.spec']
+    for spec_file in spec_files:
+        if os.path.exists(spec_file):
+            print(f"清理旧的spec文件: {spec_file}")
+            os.remove(spec_file)
 
 
 def install_dependencies():
@@ -78,6 +85,9 @@ def build_executable():
     # 清理旧的构建文件
     clean_build_dirs()
     
+    # 根据平台设置路径分隔符
+    path_sep = ';' if system == 'windows' else ':'
+    
     # 构建命令 - 单文件模式
     cmd = [
         'pyinstaller',
@@ -89,21 +99,104 @@ def build_executable():
         '--distpath=dist',  # 指定输出目录为dist
         '--workpath=build',  # 指定工作目录为build
         # 使用collect-all收集整个包及其所有依赖
-        '--collect-all=paho',  # 收集paho的所有内容
-        '--collect-all=PIL',   # 收集PIL的所有内容
-        '--copy-metadata=paho-mqtt',  # 复制包的元数据
-        # 显式包含关键模块
+        '--collect-all=paho',
+        '--collect-all=PIL',
+        '--collect-all=fastapi',
+        '--collect-all=starlette',
+        '--collect-all=uvicorn',
+        '--collect-all=jinja2',
+        '--collect-all=markupsafe',  # Jinja2 的关键依赖
+        '--copy-metadata=paho-mqtt',
+        '--copy-metadata=fastapi',
+        '--copy-metadata=starlette',
+        '--copy-metadata=uvicorn',
+        # Jinja2 的包名是 "Jinja2"（大写），但为了兼容性，我们移除 copy-metadata
+        # '--copy-metadata=Jinja2',  # 移除，因为可能导致问题
+        # MQTT相关
         '--hidden-import=paho.mqtt.client',
         '--hidden-import=paho.mqtt.publish',
         '--hidden-import=paho.mqtt.subscribe',
+        # 图像处理
         '--hidden-import=PIL.Image',
         '--hidden-import=PIL.ImageDraw',
         '--hidden-import=PIL.ImageFont',
-        # 包含项目自己的模块
-        '--paths=.',  # 添加当前目录到搜索路径
-        '--paths=src',  # 添加src目录到搜索路径
-        'app.py'
+        # FastAPI和Starlette
+        '--hidden-import=fastapi',
+        '--hidden-import=fastapi.responses',
+        '--hidden-import=fastapi.staticfiles',
+        '--hidden-import=fastapi.templating',
+        '--hidden-import=fastapi.security',
+        '--hidden-import=starlette',
+        '--hidden-import=starlette.applications',
+        '--hidden-import=starlette.routing',
+        '--hidden-import=starlette.responses',
+        '--hidden-import=starlette.staticfiles',
+        '--hidden-import=starlette.templating',
+        '--hidden-import=starlette.middleware',
+        '--hidden-import=starlette.middleware.cors',
+        # Uvicorn
+        '--hidden-import=uvicorn',
+        '--hidden-import=uvicorn.logging',
+        '--hidden-import=uvicorn.loops',
+        '--hidden-import=uvicorn.loops.auto',
+        '--hidden-import=uvicorn.protocols',
+        '--hidden-import=uvicorn.protocols.http',
+        '--hidden-import=uvicorn.protocols.http.auto',
+        '--hidden-import=uvicorn.protocols.websockets',
+        '--hidden-import=uvicorn.protocols.websockets.auto',
+        '--hidden-import=uvicorn.lifespan',
+        '--hidden-import=uvicorn.lifespan.on',
+        # Jinja2模板引擎（完整支持）
+        '--hidden-import=jinja2',
+        '--hidden-import=jinja2.ext',
+        '--hidden-import=jinja2.loaders',
+        '--hidden-import=jinja2.runtime',
+        '--hidden-import=jinja2.compiler',
+        '--hidden-import=jinja2.filters',
+        '--hidden-import=jinja2.tests',
+        '--hidden-import=jinja2.nodes',
+        '--hidden-import=jinja2.parser',
+        '--hidden-import=jinja2.lexer',
+        '--hidden-import=jinja2.environment',
+        '--hidden-import=jinja2.utils',
+        '--hidden-import=jinja2.debug',
+        '--hidden-import=jinja2.exceptions',
+        # MarkupSafe (Jinja2 依赖)
+        '--hidden-import=markupsafe',
+        '--hidden-import=markupsafe._speedups',
+        # Pydantic
+        '--hidden-import=pydantic',
+        '--hidden-import=pydantic.fields',
+        '--hidden-import=pydantic.main',
+        # 其他依赖
+        '--hidden-import=email.mime',
+        '--hidden-import=email.mime.multipart',
+        '--hidden-import=email.mime.text',
+        '--hidden-import=anyio',
+        '--hidden-import=h11',
+        '--hidden-import=httptools',
+        '--hidden-import=websockets',
+        # 项目模块路径
+        '--paths=.',
+        '--paths=src',
     ]
+    
+    # 添加数据文件（使用正确的路径分隔符）
+    print("\n检查数据文件...")
+    if os.path.exists('templates'):
+        cmd.append(f'--add-data=templates{path_sep}templates')
+        print("  ✓ 将包含 templates 目录")
+    else:
+        print("  ⚠ templates 目录不存在，跳过")
+    
+    if os.path.exists('static'):
+        cmd.append(f'--add-data=static{path_sep}static')
+        print("  ✓ 将包含 static 目录")
+    else:
+        print("  ⓘ static 目录不存在，跳过（可选）")
+    
+    # 添加入口文件
+    cmd.append('app.py')
     
     # Windows特定的隐藏导入
     if system == 'Windows':
@@ -314,10 +407,17 @@ def main():
         print("=" * 70)
         print(f"\n可执行文件位置: dist/{exe_name}")
         print(f"平台: {system} {machine}")
-        print("\n提示:")
-        print("  1. 测试可执行文件是否正常工作")
-        print("  2. 配置 dist/config/printer_config.json")
-        print("  3. 运行程序并发送测试消息")
+        print("\n下一步:")
+        print("  1. [推荐] 验证依赖是否完整:")
+        print("     python scripts/verify_dependencies.py")
+        print("  2. 测试可执行文件:")
+        print(f"     cd dist && {exe_name}")
+        print("  3. 配置打印机:")
+        print("     编辑 dist/config/printer_config.json")
+        print("  4. 访问Web界面:")
+        print("     http://127.0.0.1:5000")
+        print("\n如果遇到 'jinja2 must be installed' 错误:")
+        print("  检查上面的打包日志，确保所有模块都被正确包含")
         print("\n" + "=" * 70)
         
         # 成功时也等待，让用户看到完成信息

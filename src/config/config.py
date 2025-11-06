@@ -108,14 +108,17 @@ def parse_mqtt_url(url, extra_config=None):
     """
     解析MQTT URL配置
     
-    支持的URL格式（路径部分会被保留但不会用作topic）：
-    - ws://10.100.10.121:8083/mqtt        # WebSocket，带端口和路径
-    - ws://platform.jajachina.com/mqtt   # WebSocket，域名，默认80端口
-    - tcp://10.100.10.121:1883            # TCP，不带路径
-    - mqtt://127.0.0.1:1883               # 标准MQTT
-    - mqtts://example.com:8883            # SSL MQTT
+    支持的URL格式（完整协议支持）：
+    - mqtt://127.0.0.1:1883               # 标准MQTT (TCP)，默认端口1883
+    - tcp://10.100.10.121:1883            # TCP连接（等同于mqtt://）
+    - ws://10.100.10.121:8083/mqtt        # WebSocket，默认端口80，路径/mqtt
+    - wss://10.100.10.121/mqtt            # WebSocket Secure (HTTPS)，默认端口443，路径/mqtt
+    - mqtts://example.com:8883            # MQTT over SSL/TLS (TCP + SSL)，默认端口8883
     
-    注意：URL中的路径部分（如 /mqtt）会保留在原始URL中，但topic需要单独配置。
+    注意：
+    - URL中的路径部分（如 /mqtt）会保留，用于WebSocket路径配置
+    - topic需要单独配置，不从URL路径提取
+    - 如果URL中未指定端口，会根据协议使用默认端口
     
     Args:
         url: MQTT连接URL
@@ -132,22 +135,34 @@ def parse_mqtt_url(url, extra_config=None):
     try:
         parsed = urlparse(url)
         
-        # 提取协议
-        protocol = parsed.scheme.lower()
+        # 提取并规范化协议
+        scheme = parsed.scheme.lower()
+        
+        # 协议映射：将不同协议映射到标准协议
+        protocol_map = {
+            'mqtt': 'mqtt',      # 标准MQTT (TCP)
+            'tcp': 'mqtt',       # TCP等同于MQTT
+            'mqtts': 'mqtts',    # MQTT over SSL/TLS (TCP + SSL)
+            'ssl': 'mqtts',      # SSL等同于MQTTs
+            'ws': 'ws',          # WebSocket (HTTP)
+            'wss': 'wss'         # WebSocket Secure (HTTPS)
+        }
+        
+        protocol = protocol_map.get(scheme, 'mqtt')  # 默认使用mqtt
         
         # 提取主机和端口
         host = parsed.hostname or '127.0.0.1'
         port = parsed.port
         
-        # 根据协议设置默认端口
+        # 如果没有指定端口，根据协议设置默认端口
         if port is None:
-            if protocol in ['ws']:
+            if protocol == 'ws':
                 port = 80  # WebSocket默认端口（HTTP）
-            elif protocol in ['wss']:
+            elif protocol == 'wss':
                 port = 443  # WebSocket安全默认端口（HTTPS）
-            elif protocol in ['mqtts', 'ssl']:
+            elif protocol == 'mqtts':
                 port = 8883  # SSL MQTT默认端口
-            else:
+            else:  # mqtt, tcp
                 port = 1883  # 标准MQTT默认端口
         
         # 提取用户名和密码（如果URL中包含）
@@ -173,9 +188,13 @@ def parse_mqtt_url(url, extra_config=None):
             config['password'] = password
         
         # 合并额外配置（优先级低于URL解析的结果）
-        for key in ['username', 'password', 'topic']:
+        for key in ['username', 'password', 'topic', 'client_id']:
             if key in extra_config and key not in config:
                 config[key] = extra_config[key]
+        
+        # client_id如果没有配置，设置为None（会在MQTT客户端中自动生成）
+        if 'client_id' not in config:
+            config['client_id'] = None
         
         return config
         

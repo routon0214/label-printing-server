@@ -48,6 +48,40 @@ from src.core.zpl_generator import ZPLGenerator
 # 创建FastAPI应用
 app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
 
+# FastAPI启动事件 - 自动启动MQTT客户端
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时执行"""
+    global config_manager
+    
+    # 确保目录存在
+    ensure_directories()
+    
+    # 检查配置文件
+    config_file = 'config/printer_config.json'
+    if not os.path.exists(config_file):
+        print(f"配置文件不存在，正在创建默认配置...")
+        create_default_config(config_file)
+    
+    # 初始化配置管理器（如果还未初始化）
+    if config_manager is None:
+        config_manager = ConfigManager(config_file)
+    
+    # 启动MQTT客户端
+    print("\n" + "="*70)
+    print("应用启动事件 - 自动启动MQTT客户端")
+    print("="*70)
+    start_mqtt_client()
+
+# FastAPI关闭事件 - 停止MQTT客户端
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时执行"""
+    print("\n" + "="*70)
+    print("应用关闭事件 - 停止MQTT客户端")
+    print("="*70)
+    stop_mqtt_client()
+
 # 静态文件和模板
 static_dir = os.path.join(project_root, 'static')
 templates_dir = os.path.join(project_root, 'templates')
@@ -165,17 +199,22 @@ def stop_mqtt_client():
     """停止MQTT客户端"""
     global mqtt_client, mqtt_thread
     
-    if mqtt_client and mqtt_client.client:
+    if mqtt_client:
         try:
-            mqtt_client.client.loop_stop()
-            mqtt_client.client.disconnect()
-        except:
-            pass
+            # 使用客户端的stop方法正常停止
+            mqtt_client.stop()
+        except Exception as e:
+            print(f"停止MQTT客户端时出错: {e}")
     
     # 等待线程结束
     if mqtt_thread and mqtt_thread.is_alive():
         import time
-        mqtt_thread.join(timeout=2)
+        print("等待MQTT线程结束...")
+        mqtt_thread.join(timeout=5)
+        if mqtt_thread.is_alive():
+            print("⚠ MQTT线程未能在5秒内停止")
+        else:
+            print("✓ MQTT线程已结束")
     
     mqtt_client = None
     mqtt_thread = None
@@ -185,21 +224,49 @@ def start_mqtt_client():
     """在后台线程中启动MQTT客户端"""
     global mqtt_client, mqtt_thread, config_manager
     
+    print("\n" + "="*70)
+    print("开始启动MQTT客户端...")
+    print("="*70)
+    
     # 先停止旧的客户端（如果存在）
-    stop_mqtt_client()
+    if mqtt_client or mqtt_thread:
+        print("检测到旧的MQTT客户端，正在停止...")
+        stop_mqtt_client()
+        print("✓ 旧客户端已停止")
     
     try:
         # 确保config_manager已初始化
+        print("\n[步骤1] 加载配置文件...")
         if config_manager is None:
+            print("  初始化配置管理器...")
             config_manager = ConfigManager('config/printer_config.json')
+            print("  ✓ 配置管理器已初始化")
+        else:
+            print("  ✓ 配置管理器已存在")
         
         # 加载配置
+        print("  加载配置...")
         config = config_manager.load()
+        print(f"  ✓ 配置已加载")
+        
+        print("\n[步骤2] 解析MQTT配置...")
         mqtt_config = config_manager.get_mqtt_config()
+        print(f"  MQTT配置:")
+        print(f"    主机: {mqtt_config.get('host', '127.0.0.1')}")
+        print(f"    端口: {mqtt_config.get('port', 1883)}")
+        print(f"    协议: {mqtt_config.get('protocol', 'mqtt')}")
+        print(f"    主题: {mqtt_config.get('topic', 'zebra/print')}")
+        if mqtt_config.get('url'):
+            print(f"    URL: {mqtt_config.get('url')}")
+        if mqtt_config.get('username'):
+            print(f"    用户名: {mqtt_config.get('username')}")
+        
         printers_config = config.get('printers', [])
         printer_config = config.get('printer')
+        print(f"  ✓ 找到 {len(printers_config)} 个打印机配置")
         
         # 创建MQTT客户端
+        print("\n[步骤3] 创建MQTT客户端实例...")
         mqtt_client = LabelPrintMQTT(
             broker_host=mqtt_config.get('host', '127.0.0.1'),
             broker_port=mqtt_config.get('port', 1883),
@@ -208,21 +275,32 @@ def start_mqtt_client():
             password=mqtt_config.get('password'),
             protocol=mqtt_config.get('protocol'),
             url=mqtt_config.get('url'),
+            client_id=mqtt_config.get('client_id'),  # 如果为None，会自动生成随机ID
             printer_config=printer_config,
             printers_config=printers_config
         )
+        print("  ✓ MQTT客户端实例已创建")
         
         # 在后台线程中启动
-        mqtt_thread = threading.Thread(target=mqtt_client.start, daemon=True)
+        print("\n[步骤4] 启动后台线程...")
+        mqtt_thread = threading.Thread(target=mqtt_client.start, daemon=True, name="MQTT-Client-Thread")
         mqtt_thread.start()
+        print(f"  ✓ 后台线程已启动 (线程ID: {mqtt_thread.ident})")
+        print(f"  ✓ 线程状态: {'运行中' if mqtt_thread.is_alive() else '已停止'}")
         
+        print("\n" + "="*70)
         print("✓ MQTT客户端已在后台启动")
+        print("="*70)
         return True
         
     except Exception as e:
-        print(f"✗ MQTT客户端启动失败: {e}")
+        print("\n" + "="*70)
+        print(f"✗ MQTT客户端启动失败")
+        print("="*70)
+        print(f"错误信息: {e}")
         import traceback
         traceback.print_exc()
+        print("="*70)
         return False
 
 
@@ -621,8 +699,13 @@ async def get_status(username: str = Depends(verify_credentials)):
         "status": mqtt_status,
         "host": mqtt_config.get('host', '127.0.0.1'),
         "port": mqtt_config.get('port', 1883),
-        "topic": mqtt_config.get('topic', 'zebra/print')
+        "topic": mqtt_config.get('topic', 'zebra/print'),
+        "client_id": mqtt_config.get('client_id')  # 如果未配置则为None
     }
+    
+    # 如果客户端ID未配置，尝试从MQTT客户端实例获取（可能是自动生成的）
+    if not mqtt_info["client_id"] and mqtt_client and hasattr(mqtt_client, 'client_id'):
+        mqtt_info["client_id"] = mqtt_client.client_id
     
     if mqtt_error:
         mqtt_info["error"] = mqtt_error
@@ -673,6 +756,15 @@ async def save_config(
                 status_code=400,
                 content={"success": False, "error": "无效的配置数据"}
             )
+        
+        # 处理密码字段：如果密码是***，则保留原密码
+        if 'web' in data and data['web'].get('password') == '***':
+            if 'web' in old_config and 'password' in old_config['web']:
+                data['web']['password'] = old_config['web']['password']
+        
+        if 'mqtt' in data and data['mqtt'].get('password') == '***':
+            if 'mqtt' in old_config and 'password' in old_config['mqtt']:
+                data['mqtt']['password'] = old_config['mqtt']['password']
         
         # 保存配置到文件
         config_file = 'config/printer_config.json'
