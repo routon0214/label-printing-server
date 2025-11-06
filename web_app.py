@@ -1197,6 +1197,120 @@ async def clean_old_logs(username: str = Depends(verify_credentials)):
         )
 
 
+@app.get("/api/examples")
+async def get_examples(username: str = Depends(verify_credentials)):
+    """获取示例数据列表"""
+    try:
+        examples_file = 'data/test_samples/examples.json'
+        if not os.path.exists(examples_file):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": "示例配置文件不存在"}
+            )
+        
+        with open(examples_file, 'r', encoding='utf-8') as f:
+            examples_config = json.load(f)
+        
+        return JSONResponse({
+            "success": True,
+            "examples": examples_config.get('examples', [])
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取示例列表失败: {str(e)}'}
+        )
+
+
+@app.get("/api/examples/{example_id}")
+async def get_example_data(example_id: str, username: str = Depends(verify_credentials)):
+    """获取指定示例的数据"""
+    try:
+        # 读取示例配置
+        examples_file = 'data/test_samples/examples.json'
+        if not os.path.exists(examples_file):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": "示例配置文件不存在"}
+            )
+        
+        with open(examples_file, 'r', encoding='utf-8') as f:
+            examples_config = json.load(f)
+        
+        # 查找指定的示例
+        example = None
+        for ex in examples_config.get('examples', []):
+            if ex.get('id') == example_id:
+                example = ex
+                break
+        
+        if not example:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"示例 '{example_id}' 不存在"}
+            )
+        
+        # 如果示例有直接的data字段，直接返回
+        if example.get('data'):
+            return JSONResponse({
+                "success": True,
+                "example": example,
+                "data": example['data']
+            })
+        
+        # 否则从文件读取
+        file_name = example.get('file')
+        if not file_name:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "示例未指定数据文件"}
+            )
+        
+        file_path = os.path.join('data/test_samples', file_name)
+        if not os.path.exists(file_path):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"示例文件 '{file_name}' 不存在"}
+            )
+        
+        # 读取文件内容
+        with open(file_path, 'r', encoding='utf-8') as f:
+            if file_name.endswith('.json'):
+                data = json.load(f)
+            elif file_name.endswith('.zpl'):
+                # ZPL文件需要包装成JSON格式
+                zpl_content = f.read()
+                if example.get('wrap_zpl'):
+                    data = {
+                        "print_type": "label",
+                        "zpl_code": zpl_content
+                    }
+                else:
+                    data = zpl_content
+            else:
+                # 其他文本文件
+                data = {
+                    "raw_text": f.read()
+                }
+        
+        return JSONResponse({
+            "success": True,
+            "example": example,
+            "data": data
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取示例数据失败: {str(e)}'}
+        )
+
+
 if __name__ == '__main__':
     # 确保目录存在
     ensure_directories()

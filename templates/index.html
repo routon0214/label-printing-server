@@ -970,110 +970,135 @@
             }
         }
 
-        // 示例数据定义
-        const examples = {
-            simple_chinese: {
-                title: "简单中文标签",
-                desc: "最简单的中文标签示例，适合快速测试",
-                data: {
-                    "print_type": "label",
-                    "title": "测试",
-                    "fields": [
-                        {"label": "产品", "value": "元件A", "font_size": 20}
-                    ]
+        // 示例数据缓存
+        let examplesCache = {};
+        let examplesListCache = [];
+        
+        // 加载示例列表
+        async function loadExamplesList() {
+            try {
+                const response = await fetch('/api/examples');
+                const data = await response.json();
+                
+                if (data.success) {
+                    examplesListCache = data.examples;
+                    
+                    // 填充下拉列表
+                    const select = document.getElementById('example-select');
+                    select.innerHTML = '<option value="">请选择示例...</option>';
+                    
+                    // 按分类分组
+                    const categories = {};
+                    data.examples.forEach(ex => {
+                        const category = ex.category || '其他';
+                        if (!categories[category]) {
+                            categories[category] = [];
+                        }
+                        categories[category].push(ex);
+                    });
+                    
+                    // 添加分组选项
+                    for (const [category, items] of Object.entries(categories)) {
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = category;
+                        items.forEach(ex => {
+                            const option = document.createElement('option');
+                            option.value = ex.id;
+                            option.textContent = ex.title;
+                            optgroup.appendChild(option);
+                        });
+                        select.appendChild(optgroup);
+                    }
                 }
-            },
-            mixed: {
-                title: "中英文混合标签",
-                desc: "包含中英文混合内容和条形码的标签",
-                data: {
-                    "print_type": "label",
-                    "title": "Product 产品",
-                    "fields": [
-                        {"label": "Name", "value": "Component-A", "font_size": 22},
-                        {"label": "名称", "value": "电子元件", "font_size": 22}
-                    ],
-                    "barcode": "TEST001"
-                }
-            },
-            zpl_chinese: {
-                title: "ZPL代码含中文",
-                desc: "直接使用ZPL代码打印，包含中文内容（自动转换为图像）",
-                data: {
-                    "print_type": "label",
-                    "zpl_code": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello^FS^XZ"
-                }
-            },
-            zpl_english: {
-                title: "纯英文ZPL",
-                desc: "纯英文ZPL代码，包含条形码",
-                data: {
-                    "print_type": "label",
-                    "zpl_code": "^XA^FO50,50^A0N,40,40^FDEnglish Test^FS^FO50,120^BCN,80,Y,N,N^FD123456^FS^XZ"
-                }
-            },
-            deli_receipt: {
-                title: "ESC/POS小票（结构化）",
-                desc: "使用结构化数据打印小票，包含商品列表和总价",
-                data: {
-                    "print_type": "escpos",
-                    "title": "销售小票",
-                    "items": [
-                        {"name": "商品A", "qty": 2, "price": 15.50},
-                        {"name": "商品B", "qty": 1, "price": 30.00}
-                    ],
-                    "total": 61.00,
-                    "footer": "谢谢惠顾!"
-                }
-            },
-            deli_raw: {
-                title: "ESC/POS小票（纯文本）",
-                desc: "使用纯文本内容打印小票",
-                data: {
-                    "print_type": "escpos",
-                    "raw_text": "测试打印\n商品A  15.00\n商品B  30.00\n总计:  45.00\n谢谢!\n\n\n",
-                    "encoding": "gb2312"
-                }
+            } catch (error) {
+                console.error('加载示例列表失败:', error);
             }
-        };
+        }
         
         // 示例选择改变事件
-        function onExampleChange() {
+        async function onExampleChange() {
             const select = document.getElementById('example-select');
-            const type = select.value;
+            const exampleId = select.value;
             const preview = document.getElementById('example-preview');
             
-            if (!type || !examples[type]) {
+            if (!exampleId) {
                 preview.style.display = 'none';
                 return;
             }
             
-            const example = examples[type];
-            document.getElementById('example-title').textContent = example.title;
-            document.getElementById('example-desc').textContent = example.desc;
-            document.getElementById('example-code').textContent = JSON.stringify(example.data, null, 2);
-            preview.style.display = 'block';
+            try {
+                // 从缓存或API获取示例数据
+                let exampleData;
+                if (examplesCache[exampleId]) {
+                    exampleData = examplesCache[exampleId];
+                } else {
+                    const response = await fetch(`/api/examples/${exampleId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        exampleData = data;
+                        examplesCache[exampleId] = exampleData;
+                    } else {
+                        showResult(document.getElementById('json-result'), '加载示例失败: ' + data.error, 'error');
+                        preview.style.display = 'none';
+                        return;
+                    }
+                }
+                
+                // 显示预览
+                document.getElementById('example-title').textContent = exampleData.example.title;
+                document.getElementById('example-desc').textContent = exampleData.example.desc;
+                document.getElementById('example-code').textContent = JSON.stringify(exampleData.data, null, 2);
+                preview.style.display = 'block';
+            } catch (error) {
+                console.error('加载示例失败:', error);
+                showResult(document.getElementById('json-result'), '加载示例失败: ' + error.message, 'error');
+                preview.style.display = 'none';
+            }
         }
         
         // 加载选中的示例
-        function loadSelectedExample() {
+        async function loadSelectedExample() {
             const select = document.getElementById('example-select');
-            const type = select.value;
+            const exampleId = select.value;
             
-            if (type && examples[type]) {
-                document.getElementById('json-input').value = JSON.stringify(examples[type].data, null, 2);
+            if (!exampleId) return;
+            
+            try {
+                // 从缓存或API获取示例数据
+                let exampleData;
+                if (examplesCache[exampleId]) {
+                    exampleData = examplesCache[exampleId];
+                } else {
+                    const response = await fetch(`/api/examples/${exampleId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        exampleData = data;
+                        examplesCache[exampleId] = exampleData;
+                    } else {
+                        showResult(document.getElementById('json-result'), '加载示例失败: ' + data.error, 'error');
+                        return;
+                    }
+                }
+                
+                // 加载到编辑器
+                document.getElementById('json-input').value = JSON.stringify(exampleData.data, null, 2);
+                
                 // 滚动到JSON输入框
                 document.getElementById('json-input').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
                 // 提示
                 showResult(document.getElementById('json-result'), '示例已加载到编辑器', 'success');
+            } catch (error) {
+                console.error('加载示例失败:', error);
+                showResult(document.getElementById('json-result'), '加载示例失败: ' + error.message, 'error');
             }
         }
         
-        // 保留旧函数以兼容性（如果其他地方有调用）
+        // 保留旧函数以兼容性（不再使用）
         function loadExample(type) {
-            if (examples[type]) {
-                document.getElementById('json-input').value = JSON.stringify(examples[type].data, null, 2);
-            }
+            console.warn('loadExample() 已废弃，请使用 loadSelectedExample()');
         }
 
         // ===== 日志相关函数 =====
@@ -1272,6 +1297,7 @@
             checkStatus();
             setInterval(checkStatus, 5000);
             loadConfig();
+            loadExamplesList();  // 加载示例列表
         });
     </script>
 </body>
