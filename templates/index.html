@@ -85,75 +85,31 @@
                 </div>
 
                 <div class="card">
-                    <h2>📋 示例数据</h2>
-                    <div class="examples">
-                        <div class="example-item">
-                            <h3>1. 简单中文标签（推荐测试）</h3>
-                            <pre><code>{
-  "print_type": "label",
-  "title": "测试",
-  "fields": [
-    {"label": "产品", "value": "元件A", "font_size": 20}
-  ]
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('simple_chinese')">加载示例</button>
+                    <h2>📋 快速示例</h2>
+                    <div class="example-selector">
+                        <div class="form-group">
+                            <label for="example-select">选择示例模板:</label>
+                            <select id="example-select" onchange="onExampleChange()">
+                                <option value="">请选择示例...</option>
+                                <optgroup label="标签打印">
+                                    <option value="simple_chinese">简单中文标签（推荐）</option>
+                                    <option value="mixed">中英文混合标签</option>
+                                    <option value="zpl_chinese">ZPL代码含中文</option>
+                                    <option value="zpl_english">纯英文ZPL</option>
+                                </optgroup>
+                                <optgroup label="小票打印">
+                                    <option value="deli_receipt">ESC/POS小票（结构化）</option>
+                                    <option value="deli_raw">ESC/POS小票（纯文本）</option>
+                                </optgroup>
+                            </select>
+                            <small>选择示例后会自动加载到上方的JSON输入框</small>
                         </div>
-
-                        <div class="example-item">
-                            <h3>2. 中英文混合标签</h3>
-                            <pre><code>{
-  "print_type": "label",
-  "title": "Product 产品",
-  "fields": [
-    {"label": "Name", "value": "Component-A", "font_size": 22},
-    {"label": "名称", "value": "电子元件", "font_size": 22}
-  ],
-  "barcode": "TEST001"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('mixed')">加载示例</button>
-                        </div>
-
-                        <div class="example-item">
-                            <h3>3. 直接ZPL代码（含中文）</h3>
-                            <pre><code>{
-  "print_type": "label",
-  "zpl_code": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello^FS^XZ"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('zpl_chinese')">加载示例</button>
-                        </div>
-
-                        <div class="example-item">
-                            <h3>4. 纯英文ZPL</h3>
-                            <pre><code>{
-  "print_type": "label",
-  "zpl_code": "^XA^FO50,50^A0N,40,40^FDEnglish Test^FS^FO50,120^BCN,80,Y,N,N^FD123456^FS^XZ"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('zpl_english')">加载示例</button>
-                        </div>
-
-                        <div class="example-item">
-                            <h3>5. 得力小票（中文）</h3>
-                            <pre><code>{
-  "print_type": "escpos",
-  "title": "销售小票",
-  "items": [
-    {"name": "商品A", "qty": 2, "price": 15.50},
-    {"name": "商品B", "qty": 1, "price": 30.00}
-  ],
-  "total": 61.00,
-  "footer": "谢谢惠顾!"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('deli_receipt')">加载示例</button>
-                        </div>
-
-                        <div class="example-item">
-                            <h3>6. 得力原始文本</h3>
-                            <pre><code>{
-  "print_type": "escpos",
-  "raw_text": "测试打印\n商品A  15.00\n商品B  30.00\n总计:  45.00\n谢谢!\n\n\n",
-  "encoding": "gb2312"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('deli_raw')">加载示例</button>
+                        
+                        <div id="example-preview" class="example-preview" style="display: none;">
+                            <h3 id="example-title"></h3>
+                            <p id="example-desc"></p>
+                            <pre><code id="example-code"></code></pre>
+                            <button class="btn btn-primary" onclick="loadSelectedExample()">📥 加载到编辑器</button>
                         </div>
                     </div>
                 </div>
@@ -1014,17 +970,23 @@
             }
         }
 
-        // 加载示例
-        function loadExample(type) {
-            const examples = {
-                simple_chinese: {
+        // 示例数据定义
+        const examples = {
+            simple_chinese: {
+                title: "简单中文标签",
+                desc: "最简单的中文标签示例，适合快速测试",
+                data: {
                     "print_type": "label",
                     "title": "测试",
                     "fields": [
                         {"label": "产品", "value": "元件A", "font_size": 20}
                     ]
-                },
-                mixed: {
+                }
+            },
+            mixed: {
+                title: "中英文混合标签",
+                desc: "包含中英文混合内容和条形码的标签",
+                data: {
                     "print_type": "label",
                     "title": "Product 产品",
                     "fields": [
@@ -1032,16 +994,28 @@
                         {"label": "名称", "value": "电子元件", "font_size": 22}
                     ],
                     "barcode": "TEST001"
-                },
-                zpl_chinese: {
+                }
+            },
+            zpl_chinese: {
+                title: "ZPL代码含中文",
+                desc: "直接使用ZPL代码打印，包含中文内容（自动转换为图像）",
+                data: {
                     "print_type": "label",
                     "zpl_code": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello^FS^XZ"
-                },
-                zpl_english: {
+                }
+            },
+            zpl_english: {
+                title: "纯英文ZPL",
+                desc: "纯英文ZPL代码，包含条形码",
+                data: {
                     "print_type": "label",
                     "zpl_code": "^XA^FO50,50^A0N,40,40^FDEnglish Test^FS^FO50,120^BCN,80,Y,N,N^FD123456^FS^XZ"
-                },
-                deli_receipt: {
+                }
+            },
+            deli_receipt: {
+                title: "ESC/POS小票（结构化）",
+                desc: "使用结构化数据打印小票，包含商品列表和总价",
+                data: {
                     "print_type": "escpos",
                     "title": "销售小票",
                     "items": [
@@ -1050,16 +1024,55 @@
                     ],
                     "total": 61.00,
                     "footer": "谢谢惠顾!"
-                },
-                deli_raw: {
+                }
+            },
+            deli_raw: {
+                title: "ESC/POS小票（纯文本）",
+                desc: "使用纯文本内容打印小票",
+                data: {
                     "print_type": "escpos",
                     "raw_text": "测试打印\n商品A  15.00\n商品B  30.00\n总计:  45.00\n谢谢!\n\n\n",
                     "encoding": "gb2312"
                 }
-            };
+            }
+        };
+        
+        // 示例选择改变事件
+        function onExampleChange() {
+            const select = document.getElementById('example-select');
+            const type = select.value;
+            const preview = document.getElementById('example-preview');
             
+            if (!type || !examples[type]) {
+                preview.style.display = 'none';
+                return;
+            }
+            
+            const example = examples[type];
+            document.getElementById('example-title').textContent = example.title;
+            document.getElementById('example-desc').textContent = example.desc;
+            document.getElementById('example-code').textContent = JSON.stringify(example.data, null, 2);
+            preview.style.display = 'block';
+        }
+        
+        // 加载选中的示例
+        function loadSelectedExample() {
+            const select = document.getElementById('example-select');
+            const type = select.value;
+            
+            if (type && examples[type]) {
+                document.getElementById('json-input').value = JSON.stringify(examples[type].data, null, 2);
+                // 滚动到JSON输入框
+                document.getElementById('json-input').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 提示
+                showResult(document.getElementById('json-result'), '示例已加载到编辑器', 'success');
+            }
+        }
+        
+        // 保留旧函数以兼容性（如果其他地方有调用）
+        function loadExample(type) {
             if (examples[type]) {
-                document.getElementById('json-input').value = JSON.stringify(examples[type], null, 2);
+                document.getElementById('json-input').value = JSON.stringify(examples[type].data, null, 2);
             }
         }
 
@@ -1253,7 +1266,7 @@
                 alert('清理失败: ' + error.message);
             }
         }
-        
+
         // 页面加载时初始化
         window.addEventListener('DOMContentLoaded', () => {
             checkStatus();

@@ -254,26 +254,45 @@ main {
     border: 1px solid #f5c6cb;
 }
 
-.examples {
+/* 示例选择器样式 */
+.example-selector {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
-.example-item {
+.example-preview {
     background: #f8f9fa;
-    padding: 15px;
+    padding: 20px;
     border-radius: 8px;
     border-left: 4px solid #667eea;
+    animation: slideIn 0.3s ease;
 }
 
-.example-item h3 {
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.example-preview h3 {
     color: #667eea;
-    margin-bottom: 10px;
-    font-size: 1.1em;
+    margin-bottom: 8px;
+    font-size: 1.2em;
 }
 
-.example-item pre {
+.example-preview p {
+    color: #666;
+    margin-bottom: 15px;
+    font-size: 0.95em;
+}
+
+.example-preview pre {
     background: #2d2d2d;
     color: #f8f8f2;
     padding: 15px;
@@ -281,9 +300,10 @@ main {
     overflow-x: auto;
     font-size: 0.85em;
     line-height: 1.5;
+    margin-bottom: 15px;
 }
 
-.example-item code {
+.example-preview code {
     font-family: 'Courier New', monospace;
 }
 
