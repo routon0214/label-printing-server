@@ -322,12 +322,12 @@ def printer_setup_wizard(config_file='config/printer_config.json'):
     # 添加到配置
     print(f"\n正在添加打印机到配置...")
     if add_printer_to_config(config_file, selected_printer, printer_types, is_default):
-        print(f"✓ 成功添加打印机: {selected_printer}")
+        print(f"[OK] 成功添加打印机: {selected_printer}")
         print(f"  类型: {printer_types}")
         if is_default:
             print(f"  已设为默认打印机")
         return True
     else:
-        print(f"✗ 添加打印机失败")
+        print(f"[ERROR] 添加打印机失败")
         return False
 

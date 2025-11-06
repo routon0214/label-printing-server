@@ -39,16 +39,16 @@ def check_pillow():
     try:
         from PIL import Image, ImageDraw, ImageFont
         import PIL
-        print(f"✓ Pillow已安装")
+        print(f"[OK] Pillow已安装")
         print(f"  版本: {PIL.__version__}")
         
         # 测试基本功能
         img = Image.new('1', (100, 100), 1)
-        print(f"✓ 图像创建功能正常")
+        print(f"[OK] 图像创建功能正常")
         
         return True
     except ImportError as e:
-        print(f"✗ Pillow未安装: {e}")
+        print(f"[ERROR] Pillow未安装: {e}")
         print(f"  安装命令: pip install Pillow")
         return False
 
@@ -67,26 +67,26 @@ def check_fonts():
         found_fonts = []
         for font_path in font_paths:
             exists = os.path.exists(font_path)
-            status = "✓" if exists else "✗"
+            status = "[OK]" if exists else "[ERROR]"
             print(f"{status} {font_path}")
             if exists:
                 found_fonts.append(font_path)
         
         print()
         if found_fonts:
-            print(f"✓ 找到 {len(found_fonts)} 个可用字体")
+            print(f"[OK] 找到 {len(found_fonts)} 个可用字体")
             
             # 测试加载字体
             try:
                 from PIL import ImageFont
                 font = ImageFont.truetype(found_fonts[0], 30)
-                print(f"✓ 字体加载测试成功: {os.path.basename(found_fonts[0])}")
+                print(f"[OK] 字体加载测试成功: {os.path.basename(found_fonts[0])}")
                 return True
             except Exception as e:
-                print(f"✗ 字体加载测试失败: {e}")
+                print(f"[ERROR] 字体加载测试失败: {e}")
                 return False
         else:
-            print(f"✗ 未找到任何中文字体")
+            print(f"[ERROR] 未找到任何中文字体")
             print()
             print("解决方案:")
             if platform.system() == 'Windows':
@@ -98,7 +98,7 @@ def check_fonts():
             return False
             
     except Exception as e:
-        print(f"✗ 字体检查失败: {e}")
+        print(f"[ERROR] 字体检查失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -122,18 +122,18 @@ def test_chinese_conversion():
             hex_data, w, h, bpr, total = text_to_image_zpl(text, font_size=30)
             
             if hex_data:
-                print(f"  ✓ 转换成功")
+                print(f"  [OK] 转换成功")
                 print(f"    尺寸: {w}x{h}px")
                 print(f"    数据: {total} bytes")
                 print(f"    十六进制前20字符: {hex_data[:20]}...")
             else:
-                print(f"  ✗ 转换失败")
+                print(f"  [ERROR] 转换失败")
                 all_success = False
         
         return all_success
         
     except Exception as e:
-        print(f"✗ 转换测试失败: {e}")
+        print(f"[ERROR] 转换测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -147,10 +147,10 @@ def check_printer_config():
         
         config_file = 'config/printer_config.json'
         if not os.path.exists(config_file):
-            print(f"✗ 配置文件不存在: {config_file}")
+            print(f"[ERROR] 配置文件不存在: {config_file}")
             return False
         
-        print(f"✓ 配置文件存在: {config_file}")
+        print(f"[OK] 配置文件存在: {config_file}")
         
         config_manager = ConfigManager(config_file)
         config = config_manager.load()
@@ -181,7 +181,7 @@ def check_printer_config():
         return True
         
     except Exception as e:
-        print(f"✗ 配置检查失败: {e}")
+        print(f"[ERROR] 配置检查失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -207,7 +207,7 @@ def generate_test_label():
         zpl_code = generator.generate_label_zpl(label_data)
         
         if zpl_code and len(zpl_code) > 0:
-            print(f"\n✓ 标签生成成功")
+            print(f"\n[OK] 标签生成成功")
             print(f"  ZPL代码长度: {len(zpl_code)} 字符")
             print(f"  包含图像命令: {'是' if '^GFA' in zpl_code else '否'}")
             
@@ -226,11 +226,11 @@ def generate_test_label():
             
             return True
         else:
-            print(f"✗ 标签生成失败")
+            print(f"[ERROR] 标签生成失败")
             return False
             
     except Exception as e:
-        print(f"✗ 标签生成失败: {e}")
+        print(f"[ERROR] 标签生成失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -279,20 +279,20 @@ def main():
     # 总结
     print_section("诊断结果汇总")
     for name, status in results.items():
-        status_icon = "✓" if status else "✗"
+        status_icon = "[OK]" if status else "[ERROR]"
         print(f"{status_icon} {name}: {'正常' if status else '异常'}")
     
     print()
     all_pass = all(results.values())
     if all_pass:
-        print("✓ 所有检查通过！系统配置正常。")
+        print("[OK] 所有检查通过！系统配置正常。")
         print()
         print("如果仍然出现乱码，请检查:")
         print("  1. 上传的文件编码是否为UTF-8")
         print("  2. 打印机是否支持接收UTF-8编码的数据")
         print("  3. 使用生成的 test_encoding_label.zpl 进行测试")
     else:
-        print("✗ 发现问题，请根据上述信息进行修复。")
+        print("[ERROR] 发现问题，请根据上述信息进行修复。")
         print()
         print("常见问题:")
         print("  1. 如果Pillow未安装: pip install Pillow")

@@ -61,7 +61,7 @@ def convert_text_to_image(parsed, font_size=30):
     hex_data, w, h, bpr, total = text_to_image_zpl(text, font_size=font_size)
     
     if not hex_data:
-        print(f"  ✗ 转换失败")
+        print(f"  [ERROR] 转换失败")
         return None
     
     # 生成GFA命令
@@ -85,7 +85,7 @@ def convert_zpl_file(input_file, output_file=None):
     
     # 读取文件
     if not os.path.exists(input_file):
-        print(f"✗ 文件不存在: {input_file}")
+        print(f"[ERROR] 文件不存在: {input_file}")
         return False
     
     print(f"\n读取文件: {input_file}")
@@ -128,11 +128,11 @@ def convert_zpl_file(input_file, output_file=None):
                 if gfa_cmd:
                     converted_lines.append(gfa_cmd)
                     converted_count += 1
-                    print(f"  ✓ 已转换为图像")
+                    print(f"  [OK] 已转换为图像")
                 else:
                     # 转换失败，保留原命令
                     converted_lines.append(line)
-                    print(f"  ✗ 保留原命令")
+                    print(f"  [ERROR] 保留原命令")
             else:
                 # 没有中文，保留原命令
                 converted_lines.append(line)
@@ -154,7 +154,7 @@ def convert_zpl_file(input_file, output_file=None):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(output_content)
     
-    print(f"\n✓ 已保存到: {output_file}")
+    print(f"\n[OK] 已保存到: {output_file}")
     print(f"文件大小: {len(output_content)} 字符")
     
     # 显示预览
@@ -191,16 +191,16 @@ def main():
         
         if success:
             print("\n" + "="*70)
-            print("✓ 转换成功！")
+            print("[OK] 转换成功！")
             print("="*70)
             print("\n下一步:")
             print("  1. 通过Web界面上传转换后的文件")
             print("  2. 或直接发送到打印机测试")
         else:
-            print("\n✗ 转换失败")
+            print("\n[ERROR] 转换失败")
     
     except Exception as e:
-        print(f"\n✗ 转换出错: {e}")
+        print(f"\n[ERROR] 转换出错: {e}")
         import traceback
         traceback.print_exc()
     

@@ -90,7 +90,7 @@ def create_test_pdf():
         
         # 检查文件大小
         file_size = os.path.getsize(pdf_file)
-        print(f"✓ 真实PDF文件已创建: {pdf_file}")
+        print(f"[OK] 真实PDF文件已创建: {pdf_file}")
         print(f"  文件大小: {file_size:,} 字节 ({file_size/1024:.2f} KB)")
         return pdf_file
         
@@ -172,7 +172,7 @@ startxref
             f.write(pdf_content)
         
         file_size = os.path.getsize(pdf_file)
-        print(f"✓ 简单PDF文件已创建: {pdf_file}")
+        print(f"[OK] 简单PDF文件已创建: {pdf_file}")
         print(f"  文件大小: {file_size:,} 字节")
         return pdf_file
 
@@ -237,9 +237,9 @@ def test_pdf_print_with_file_path():
         result = client.publish(mqtt_cfg['topic'], json.dumps(message))
         
         if result.rc == 0:
-            print("✓ MQTT消息发送成功")
+            print("[OK] MQTT消息发送成功")
         else:
-            print(f"✗ MQTT消息发送失败: {result.rc}")
+            print(f"[ERROR] MQTT消息发送失败: {result.rc}")
         
         client.disconnect()
         print("=" * 60)
@@ -247,7 +247,7 @@ def test_pdf_print_with_file_path():
         return True
         
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print(f"[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -267,7 +267,7 @@ def test_pdf_print_with_base64():
         # 编码为base64
         print("\n编码PDF为base64...")
         pdf_base64 = encode_file_to_base64(pdf_file)
-        print(f"✓ Base64长度: {len(pdf_base64)} 字符")
+        print(f"[OK] Base64长度: {len(pdf_base64)} 字符")
         
         # 准备MQTT消息
         message = {
@@ -294,9 +294,9 @@ def test_pdf_print_with_base64():
         result = client.publish(mqtt_cfg['topic'], json.dumps(message))
         
         if result.rc == 0:
-            print("✓ MQTT消息发送成功")
+            print("[OK] MQTT消息发送成功")
         else:
-            print(f"✗ MQTT消息发送失败: {result.rc}")
+            print(f"[ERROR] MQTT消息发送失败: {result.rc}")
         
         client.disconnect()
         print("=" * 60)
@@ -304,7 +304,7 @@ def test_pdf_print_with_base64():
         return True
         
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print(f"[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False

@@ -150,10 +150,10 @@ def test_escpos_from_file():
     text_content = read_print_text_file(file_path)
     
     if not text_content:
-        print("✗ 无法读取文件")
+        print("[ERROR] 无法读取文件")
         return False
     
-    print(f"✓ 文件内容 ({len(text_content)} 字符):")
+    print(f"[OK] 文件内容 ({len(text_content)} 字符):")
     print("-" * 70)
     print(text_content)
     print("-" * 70)
@@ -182,15 +182,15 @@ def test_escpos_from_file():
         client.disconnect()
         
         if result.rc == 0:
-            print("✓ 打印任务发送成功")
+            print("[OK] 打印任务发送成功")
             print("\n提示: 请确保打印服务已启动，并且配置了ESC/POS打印机")
             return True
         else:
-            print(f"✗ 发送失败，错误码: {result.rc}")
+            print(f"[ERROR] 发送失败，错误码: {result.rc}")
             return False
             
     except Exception as e:
-        print(f"✗ 发送失败: {e}")
+        print(f"[ERROR] 发送失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -233,14 +233,14 @@ def test_raw_escpos():
         client.disconnect()
         
         if result.rc == 0:
-            print("✓ 原始文本打印任务发送成功")
+            print("[OK] 原始文本打印任务发送成功")
             return True
         else:
-            print(f"✗ 发送失败，错误码: {result.rc}")
+            print(f"[ERROR] 发送失败，错误码: {result.rc}")
             return False
             
     except Exception as e:
-        print(f"✗ 发送失败: {e}")
+        print(f"[ERROR] 发送失败: {e}")
         import traceback
         traceback.print_exc()
         return False

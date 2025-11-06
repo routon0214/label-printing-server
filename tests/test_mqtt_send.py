@@ -50,9 +50,9 @@ def send_test_label(broker_host='10.100.10.121', broker_port=1883, topic='zebra/
         result = client.publish(topic, json.dumps(label_data, ensure_ascii=False))
         
         if result.rc == 0:
-            print("✓ 消息已发送")
+            print("[OK] 消息已发送")
         else:
-            print(f"✗ 发送失败，错误码: {result.rc}")
+            print(f"[ERROR] 发送失败，错误码: {result.rc}")
         
         # 断开
         time.sleep(0.5)

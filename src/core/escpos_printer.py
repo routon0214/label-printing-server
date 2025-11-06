@@ -229,10 +229,10 @@ class ESCPOSPrinter:
             sock.connect((self.printer_ip, self.printer_port))
             sock.sendall(commands)
             sock.close()
-            print(f"✓ ESC/POS网络打印成功: {self.printer_ip}:{self.printer_port}")
+            print(f"[OK] ESC/POS网络打印成功: {self.printer_ip}:{self.printer_port}")
             return True
         except Exception as e:
-            print(f"✗ ESC/POS网络打印失败: {e}")
+            print(f"[ERROR] ESC/POS网络打印失败: {e}")
             return False
     
     def _send_windows(self, commands):
@@ -249,14 +249,14 @@ class ESCPOSPrinter:
             win32print.EndDocPrinter(printer_handle)
             win32print.ClosePrinter(printer_handle)
             
-            print(f"✓ ESC/POS Windows打印成功: {self.printer_name}")
+            print(f"[OK] ESC/POS Windows打印成功: {self.printer_name}")
             return True
             
         except ImportError:
             print("错误：需要安装 pywin32: pip install pywin32")
             return False
         except Exception as e:
-            print(f"✗ ESC/POS Windows打印失败: {e}")
+            print(f"[ERROR] ESC/POS Windows打印失败: {e}")
             return False
     
     def _send_device(self, commands):
@@ -265,14 +265,14 @@ class ESCPOSPrinter:
             with open(self.device_path, 'wb') as device:
                 device.write(commands)
             
-            print(f"✓ ESC/POS设备打印成功: {self.device_path}")
+            print(f"[OK] ESC/POS设备打印成功: {self.device_path}")
             return True
             
         except PermissionError:
-            print(f"✗ 权限不足: {self.device_path}")
+            print(f"[ERROR] 权限不足: {self.device_path}")
             print(f"提示：sudo chmod 666 {self.device_path}")
             return False
         except Exception as e:
-            print(f"✗ ESC/POS设备打印失败: {e}")
+            print(f"[ERROR] ESC/POS设备打印失败: {e}")
             return False
 

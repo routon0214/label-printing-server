@@ -59,7 +59,7 @@ zpl_code = '\n'.join(zpl_parts)
 with open(output_file, 'w', encoding='utf-8') as f:
     f.write(zpl_code)
 
-print(f"\n✓ 已生成: {output_file}")
+print(f"\n[OK] 已生成: {output_file}")
 print(f"  文件大小: {len(zpl_code)} 字符")
 print(f"  命令数: {len(zpl_parts)}")
 print("\n请通过Web界面上传此文件进行打印测试")

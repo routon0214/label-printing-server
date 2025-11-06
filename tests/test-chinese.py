@@ -223,7 +223,7 @@ def print_to_zt411(zpl_code):
         win32print.EndDocPrinter(printer_handle)
         win32print.ClosePrinter(printer_handle)
         
-        print("\n✓ 打印命令已发送!")
+        print("\n[OK] 打印命令已发送!")
         print("请检查打印机输出。")
         return True
         
@@ -235,7 +235,7 @@ def print_to_zt411(zpl_code):
         print("="*60 + "\n")
         return False
     except Exception as e:
-        print(f"\n✗ 打印失败: {e}")
+        print(f"\n[ERROR] 打印失败: {e}")
         import traceback
         traceback.print_exc()
         return False

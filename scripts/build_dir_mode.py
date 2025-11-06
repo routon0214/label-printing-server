@@ -70,7 +70,7 @@ def build_executable():
     print(f"Python: {sys.version.split()[0]}")
     print(f"项目根目录: {project_root}")
     print("=" * 70)
-    print("\n⚠ 使用目录模式打包（更容易调试依赖问题）")
+    print("\n[WARNING] 使用目录模式打包（更容易调试依赖问题）")
     print()
     
     # 清理旧的构建文件
@@ -134,13 +134,13 @@ def build_executable():
     print("\n检查数据文件...")
     if os.path.exists('templates'):
         cmd.append(f'--add-data=templates{path_sep}templates')
-        print("  ✓ 将包含 templates 目录")
+        print("  [OK] 将包含 templates 目录")
     else:
-        print("  ⚠ templates 目录不存在")
+        print("  [WARNING] templates 目录不存在")
     
     if os.path.exists('static'):
         cmd.append(f'--add-data=static{path_sep}static')
-        print("  ✓ 将包含 static 目录")
+        print("  [OK] 将包含 static 目录")
     
     # Windows特定
     if system == 'windows':
@@ -167,7 +167,7 @@ def build_executable():
         # 检查输出目录
         dist_dir = 'dist/label-printing-server'
         if os.path.exists(dist_dir):
-            print(f"\n✓ 应用目录已生成: {dist_dir}/")
+            print(f"\n[OK] 应用目录已生成: {dist_dir}/")
             
             # 列出目录内容
             print("\n目录内容:")
@@ -202,7 +202,7 @@ def create_launch_script(system, dist_dir):
             f.write('cd label-printing-server\n')
             f.write('label-printing-server.exe\n')
             f.write('pause\n')
-        print(f"\n✓ 启动脚本已创建: {script_path}")
+        print(f"\n[OK] 启动脚本已创建: {script_path}")
     else:
         # Linux/Mac shell脚本
         script_path = os.path.join('dist', 'start.sh')
@@ -211,7 +211,7 @@ def create_launch_script(system, dist_dir):
             f.write('cd label-printing-server\n')
             f.write('./label-printing-server\n')
         os.chmod(script_path, 0o755)
-        print(f"\n✓ 启动脚本已创建: {script_path}")
+        print(f"\n[OK] 启动脚本已创建: {script_path}")
 
 
 def create_zip_package():
@@ -223,7 +223,7 @@ def create_zip_package():
     dist_dir = 'dist/label-printing-server'
     
     if not os.path.exists(dist_dir):
-        print("✗ 找不到打包目录，无法创建ZIP")
+        print("[ERROR] 找不到打包目录，无法创建ZIP")
         return False
     
     # 生成带时间戳的zip文件名
@@ -253,13 +253,13 @@ def create_zip_package():
         # 获取文件大小
         zip_size = os.path.getsize(zip_filename_simple) / (1024 * 1024)
         
-        print(f"  ✓ 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
-        print(f"  ✓ 备份版本: {zip_filename}")
+        print(f"  [OK] 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
+        print(f"  [OK] 备份版本: {zip_filename}")
         
         return True
         
     except Exception as e:
-        print(f"  ✗ 创建ZIP失败: {e}")
+        print(f"  [ERROR] 创建ZIP失败: {e}")
         return False
 
 

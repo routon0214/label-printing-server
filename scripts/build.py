@@ -187,13 +187,13 @@ def build_executable():
     print("\n检查数据文件...")
     if os.path.exists('templates'):
         cmd.append(f'--add-data=templates{path_sep}templates')
-        print("  ✓ 将包含 templates 目录")
+        print("  [OK] 将包含 templates 目录")
     else:
-        print("  ⚠ templates 目录不存在，跳过")
+        print("  [WARNING] templates 目录不存在，跳过")
     
     if os.path.exists('static'):
         cmd.append(f'--add-data=static{path_sep}static')
-        print("  ✓ 将包含 static 目录")
+        print("  [OK] 将包含 static 目录")
     else:
         print("  ⓘ static 目录不存在，跳过（可选）")
     
@@ -224,11 +224,11 @@ def build_executable():
         exe_path = f'dist/{exe_name}'
         
         if os.path.exists(exe_path):
-            print(f"\n✓ 可执行文件已生成: {exe_path}")
+            print(f"\n[OK] 可执行文件已生成: {exe_path}")
             file_size = os.path.getsize(exe_path) / (1024 * 1024)  # MB
             print(f"  文件大小: {file_size:.2f} MB")
         else:
-            print(f"\n⚠ 警告: 未找到预期的输出文件 {exe_path}")
+            print(f"\n[WARNING] 警告: 未找到预期的输出文件 {exe_path}")
         
         print(f"\n输出目录: dist/")
         
@@ -380,7 +380,7 @@ def create_zip_package():
     dist_dir = 'dist'
     
     if not os.path.exists(dist_dir):
-        print("✗ 找不到dist目录，无法创建ZIP")
+        print("[ERROR] 找不到dist目录，无法创建ZIP")
         return False
     
     # 生成带时间戳的zip文件名
@@ -413,13 +413,13 @@ def create_zip_package():
         # 获取文件大小
         zip_size = os.path.getsize(zip_filename_simple) / (1024 * 1024)
         
-        print(f"  ✓ 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
-        print(f"  ✓ 备份版本: {zip_filename}")
+        print(f"  [OK] 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
+        print(f"  [OK] 备份版本: {zip_filename}")
         
         return True
         
     except Exception as e:
-        print(f"  ✗ 创建ZIP失败: {e}")
+        print(f"  [ERROR] 创建ZIP失败: {e}")
         return False
 
 

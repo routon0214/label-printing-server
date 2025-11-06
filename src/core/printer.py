@@ -63,10 +63,10 @@ class ZebraPrinter:
                 result = find_best_printer(printers, search_name)
                 if result:
                     score = fuzzy_match_printer(result, search_name)
-                    print(f"  ✓ 匹配到: {result} (分数: {score})")
+                    print(f"  [OK] 匹配到: {result} (分数: {score})")
                     return result
                 else:
-                    print(f"  ✗ 未找到匹配的打印机")
+                    print(f"  [ERROR] 未找到匹配的打印机")
                     print(f"  可用打印机: {', '.join(printers[:3])}")
                     return None
                     
@@ -88,10 +88,10 @@ class ZebraPrinter:
                 result = find_best_printer(printers, search_name)
                 if result:
                     score = fuzzy_match_printer(result, search_name)
-                    print(f"  ✓ 匹配到CUPS打印机: {result} (分数: {score})")
+                    print(f"  [OK] 匹配到CUPS打印机: {result} (分数: {score})")
                     return result
                 else:
-                    print(f"  ✗ 未找到匹配的CUPS打印机")
+                    print(f"  [ERROR] 未找到匹配的CUPS打印机")
                     print(f"  可用打印机: {', '.join(list(printers.keys())[:3])}")
                     return None
                     
@@ -144,7 +144,7 @@ class ZebraPrinter:
                         best_pattern = pattern
             
             if best_printer and best_score >= 50:
-                print(f"✓ 匹配打印机: {best_printer} (模式: {best_pattern}, 分数: {best_score})")
+                print(f"[OK] 匹配打印机: {best_printer} (模式: {best_pattern}, 分数: {best_score})")
                 self.printer_name = best_printer
             elif printers:
                 # 未找到好的匹配，使用第一个
@@ -189,7 +189,7 @@ class ZebraPrinter:
                             best_pattern = pattern
                 
                 if best_printer and best_score >= 50:
-                    print(f"✓ 匹配CUPS打印机: {best_printer} (模式: {best_pattern}, 分数: {best_score})")
+                    print(f"[OK] 匹配CUPS打印机: {best_printer} (模式: {best_pattern}, 分数: {best_score})")
                     self.printer_name = best_printer
                     return
                 elif printers:
@@ -208,7 +208,7 @@ class ZebraPrinter:
         usb_devices = ['/dev/usb/lp0', '/dev/usb/lp1', '/dev/usb/lp2']
         for device in usb_devices:
             if os.path.exists(device):
-                print(f"✓ 找到USB设备: {device}")
+                print(f"[OK] 找到USB设备: {device}")
                 self.device_path = device
                 return
         
@@ -256,10 +256,10 @@ class ZebraPrinter:
             sock.connect((self.printer_ip, self.printer_port))
             sock.sendall(zpl_code.encode('utf-8'))
             sock.close()
-            print(f"✓ 网络打印成功: {self.printer_ip}:{self.printer_port}")
+            print(f"[OK] 网络打印成功: {self.printer_ip}:{self.printer_port}")
             return True
         except Exception as e:
-            print(f"✗ 网络打印失败: {e}")
+            print(f"[ERROR] 网络打印失败: {e}")
             return False
     
     def _print_windows(self, zpl_code):
@@ -280,14 +280,14 @@ class ZebraPrinter:
             win32print.EndDocPrinter(printer_handle)
             win32print.ClosePrinter(printer_handle)
             
-            print(f"✓ Windows打印成功: {self.printer_name}")
+            print(f"[OK] Windows打印成功: {self.printer_name}")
             return True
             
         except ImportError:
             print("错误：Windows需要安装 pywin32: pip install pywin32")
             return False
         except Exception as e:
-            print(f"✗ Windows打印失败: {e}")
+            print(f"[ERROR] Windows打印失败: {e}")
             return False
     
     def _print_cups(self, zpl_code):
@@ -308,14 +308,14 @@ class ZebraPrinter:
             # 删除临时文件
             os.remove(temp_file)
             
-            print(f"✓ CUPS打印成功: {self.printer_name}")
+            print(f"[OK] CUPS打印成功: {self.printer_name}")
             return True
             
         except ImportError:
             print("提示：Linux建议安装 pycups: pip install pycups")
             return False
         except Exception as e:
-            print(f"✗ CUPS打印失败: {e}")
+            print(f"[ERROR] CUPS打印失败: {e}")
             return False
     
     def _print_device(self, zpl_code):
@@ -324,14 +324,14 @@ class ZebraPrinter:
             with open(self.device_path, 'wb') as device:
                 device.write(zpl_code.encode('utf-8'))
             
-            print(f"✓ 设备打印成功: {self.device_path}")
+            print(f"[OK] 设备打印成功: {self.device_path}")
             return True
             
         except PermissionError:
-            print(f"✗ 权限不足: {self.device_path}")
+            print(f"[ERROR] 权限不足: {self.device_path}")
             print(f"提示：请运行 sudo chmod 666 {self.device_path}")
             return False
         except Exception as e:
-            print(f"✗ 设备打印失败: {e}")
+            print(f"[ERROR] 设备打印失败: {e}")
             return False
 

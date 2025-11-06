@@ -62,50 +62,50 @@ def test_url_parsing():
             # 验证协议映射
             if url.startswith('mqtt://') or url.startswith('tcp://'):
                 if protocol != 'mqtt':
-                    print(f"  ✗ 错误：协议应该是 'mqtt'，实际是 '{protocol}'")
+                    print(f"  [ERROR] 错误：协议应该是 'mqtt'，实际是 '{protocol}'")
                     all_passed = False
                 else:
-                    print(f"  ✓ 协议映射正确")
+                    print(f"  [OK] 协议映射正确")
             
             elif url.startswith('ws://'):
                 if protocol != 'ws':
-                    print(f"  ✗ 错误：协议应该是 'ws'，实际是 '{protocol}'")
+                    print(f"  [ERROR] 错误：协议应该是 'ws'，实际是 '{protocol}'")
                     all_passed = False
                 else:
-                    print(f"  ✓ 协议映射正确")
+                    print(f"  [OK] 协议映射正确")
             
             elif url.startswith('wss://'):
                 if protocol != 'wss':
-                    print(f"  ✗ 错误：协议应该是 'wss'，实际是 '{protocol}'")
+                    print(f"  [ERROR] 错误：协议应该是 'wss'，实际是 '{protocol}'")
                     all_passed = False
                 else:
-                    print(f"  ✓ 协议映射正确")
+                    print(f"  [OK] 协议映射正确")
             
             elif url.startswith('mqtts://'):
                 if protocol != 'mqtts':
-                    print(f"  ✗ 错误：协议应该是 'mqtts'，实际是 '{protocol}'")
+                    print(f"  [ERROR] 错误：协议应该是 'mqtts'，实际是 '{protocol}'")
                     all_passed = False
                 else:
-                    print(f"  ✓ 协议映射正确")
+                    print(f"  [OK] 协议映射正确")
             
             # 验证端口
             if port and port > 0:
-                print(f"  ✓ 端口解析正确")
+                print(f"  [OK] 端口解析正确")
             else:
-                print(f"  ⚠ 警告：端口未正确解析")
+                print(f"  [WARNING] 警告：端口未正确解析")
             
         except Exception as e:
             print(f"\nURL: {url}")
-            print(f"  ✗ 解析失败: {e}")
+            print(f"  [ERROR] 解析失败: {e}")
             all_passed = False
             import traceback
             traceback.print_exc()
     
     print("\n" + "=" * 70)
     if all_passed:
-        print("✓ 所有URL解析测试通过")
+        print("[OK] 所有URL解析测试通过")
     else:
-        print("✗ 部分URL解析测试失败")
+        print("[ERROR] 部分URL解析测试失败")
     print("=" * 70)
     
     return all_passed

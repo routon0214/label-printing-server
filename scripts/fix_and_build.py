@@ -64,9 +64,9 @@ def fix_dependencies():
     for dep in critical_deps:
         try:
             __import__(dep.replace('-', '_').lower())
-            print(f"  ✓ {dep}")
+            print(f"  [OK] {dep}")
         except ImportError:
-            print(f"  ✗ {dep} - 缺失")
+            print(f"  [ERROR] {dep} - 缺失")
             missing.append(dep)
     
     if missing:
@@ -75,9 +75,9 @@ def fix_dependencies():
             print(f"\n安装 {dep}...")
             try:
                 subprocess.check_call([sys.executable, '-m', 'pip', 'install', dep, '--upgrade'])
-                print(f"  ✓ {dep} 安装成功")
+                print(f"  [OK] {dep} 安装成功")
             except subprocess.CalledProcessError as e:
-                print(f"  ✗ {dep} 安装失败: {e}")
+                print(f"  [ERROR] {dep} 安装失败: {e}")
                 return False
     
     # 强制重新安装 Jinja2 和 MarkupSafe（确保完整）
@@ -85,9 +85,9 @@ def fix_dependencies():
     try:
         subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', 'jinja2', 'markupsafe', '-y'])
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'jinja2', 'markupsafe', '--no-cache-dir'])
-        print("  ✓ Jinja2 和 MarkupSafe 重新安装成功")
+        print("  [OK] Jinja2 和 MarkupSafe 重新安装成功")
     except subprocess.CalledProcessError as e:
-        print(f"  ⚠ 重新安装警告: {e}")
+        print(f"  [WARNING] 重新安装警告: {e}")
     
     return True
 
@@ -136,7 +136,7 @@ hiddenimports += [
 ]
 """)
     
-    print(f"  ✓ 创建 {hook_jinja2}")
+    print(f"  [OK] 创建 {hook_jinja2}")
     
     # Hook for Starlette
     hook_starlette = os.path.join(hook_dir, 'hook-starlette.py')
@@ -148,7 +148,7 @@ datas, binaries, hiddenimports = collect_all('starlette')
 hiddenimports += collect_submodules('starlette')
 """)
     
-    print(f"  ✓ 创建 {hook_starlette}")
+    print(f"  [OK] 创建 {hook_starlette}")
     
     return hook_dir
 
@@ -280,10 +280,10 @@ def build_with_ultimate_config(hook_dir):
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8', errors='replace')
-        print("✓ 打包成功")
+        print("[OK] 打包成功")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"✗ 打包失败")
+        print(f"[ERROR] 打包失败")
         print(f"\n错误输出:\n{e.stderr}")
         return False
 
@@ -295,7 +295,7 @@ def verify_build():
     dist_dir = 'dist/label-printing-server'
     
     if not os.path.exists(dist_dir):
-        print("✗ 找不到打包目录")
+        print("[ERROR] 找不到打包目录")
         return False
     
     # 检查关键文件
@@ -305,15 +305,15 @@ def verify_build():
     exe_path = os.path.join(dist_dir, exe_name)
     
     if os.path.exists(exe_path):
-        print(f"  ✓ {exe_name}")
+        print(f"  [OK] {exe_name}")
     else:
-        print(f"  ✗ {exe_name} 缺失")
+        print(f"  [ERROR] {exe_name} 缺失")
         return False
     
     # 检查 _internal 目录
     internal_dir = os.path.join(dist_dir, '_internal')
     if os.path.exists(internal_dir):
-        print(f"  ✓ _internal/ 目录")
+        print(f"  [OK] _internal/ 目录")
         
         # 检查 Jinja2
         jinja2_files = []
@@ -323,14 +323,14 @@ def verify_build():
                     jinja2_files.append(os.path.join(root, file))
         
         if jinja2_files:
-            print(f"  ✓ 找到 {len(jinja2_files)} 个 Jinja2 相关文件")
+            print(f"  [OK] 找到 {len(jinja2_files)} 个 Jinja2 相关文件")
         else:
-            print(f"  ✗ 未找到 Jinja2 文件")
+            print(f"  [ERROR] 未找到 Jinja2 文件")
     
     # 检查 templates
     templates_dir = os.path.join(dist_dir, 'templates')
     if os.path.exists(templates_dir):
-        print(f"  ✓ templates/ 目录")
+        print(f"  [OK] templates/ 目录")
     
     print("\n" + "=" * 70)
     print("验证完成")
@@ -353,22 +353,22 @@ sys.path.insert(0, 'label-printing-server/_internal')
 print("测试 Jinja2...")
 try:
     import jinja2
-    print(f"✓ Jinja2 版本: {jinja2.__version__}")
-    print(f"✓ Jinja2 路径: {jinja2.__file__}")
+    print(f"[OK] Jinja2 版本: {jinja2.__version__}")
+    print(f"[OK] Jinja2 路径: {jinja2.__file__}")
     
     from jinja2 import Template
     t = Template("Hello {{ name }}!")
     result = t.render(name="World")
-    print(f"✓ 模板测试: {result}")
+    print(f"[OK] 模板测试: {result}")
     
-    print("\\n✓ Jinja2 完全正常！")
+    print("\\n[OK] Jinja2 完全正常！")
 except Exception as e:
-    print(f"✗ Jinja2 测试失败: {e}")
+    print(f"[ERROR] Jinja2 测试失败: {e}")
     import traceback
     traceback.print_exc()
 """)
     
-    print(f"  ✓ 创建 {test_script}")
+    print(f"  [OK] 创建 {test_script}")
 
 
 def create_zip_package():
@@ -378,7 +378,7 @@ def create_zip_package():
     dist_dir = 'dist/label-printing-server'
     
     if not os.path.exists(dist_dir):
-        print("✗ 找不到打包目录，无法创建ZIP")
+        print("[ERROR] 找不到打包目录，无法创建ZIP")
         return False
     
     # 生成带时间戳的zip文件名
@@ -408,13 +408,13 @@ def create_zip_package():
         # 获取文件大小
         zip_size = os.path.getsize(zip_filename_simple) / (1024 * 1024)
         
-        print(f"  ✓ 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
-        print(f"  ✓ 备份版本: {zip_filename}")
+        print(f"  [OK] 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
+        print(f"  [OK] 备份版本: {zip_filename}")
         
         return True
         
     except Exception as e:
-        print(f"  ✗ 创建ZIP失败: {e}")
+        print(f"  [ERROR] 创建ZIP失败: {e}")
         return False
 
 
@@ -438,7 +438,7 @@ def main():
         
         # 步骤 2: 修复依赖
         if not fix_dependencies():
-            print("\n✗ 依赖修复失败")
+            print("\n[ERROR] 依赖修复失败")
             input("\n按回车键退出...")
             return 1
         
@@ -447,13 +447,13 @@ def main():
         
         # 步骤 4: 打包
         if not build_with_ultimate_config(hook_dir):
-            print("\n✗ 打包失败")
+            print("\n[ERROR] 打包失败")
             input("\n按回车键退出...")
             return 1
         
         # 步骤 5: 验证
         if not verify_build():
-            print("\n⚠ 验证发现问题")
+            print("\n[WARNING] 验证发现问题")
         
         # 创建测试脚本
         create_test_script()
@@ -492,7 +492,7 @@ def main():
         input("\n按回车键退出...")
         return 1
     except Exception as e:
-        print(f"\n✗ 错误: {e}")
+        print(f"\n[ERROR] 错误: {e}")
         import traceback
         traceback.print_exc()
         input("\n按回车键退出...")

@@ -68,15 +68,15 @@ class ProjectInitializer:
     
     def print_success(self, message):
         """打印成功信息"""
-        print(self.colorize(f"✓ {message}", self.GREEN))
+        print(self.colorize(f"[OK] {message}", self.GREEN))
     
     def print_warning(self, message):
         """打印警告信息"""
-        print(self.colorize(f"⚠ {message}", self.YELLOW))
+        print(self.colorize(f"[WARNING] {message}", self.YELLOW))
     
     def print_error(self, message):
         """打印错误信息"""
-        print(self.colorize(f"✗ {message}", self.RED))
+        print(self.colorize(f"[ERROR] {message}", self.RED))
     
     def check_python_version(self):
         """检查 Python 版本"""
@@ -280,7 +280,7 @@ class ProjectInitializer:
             
             self.print_success(f"默认配置文件创建成功: {config_file.name}")
         
-        self.print_warning("⚠ 请根据实际情况修改配置文件:")
+        self.print_warning("[WARNING] 请根据实际情况修改配置文件:")
         print(f"  - MQTT 连接信息")
         print(f"  - Web 界面登录密码")
         print(f"  - 打印机配置")
@@ -311,9 +311,9 @@ class ProjectInitializer:
             try:
                 cmd = [str(python_path), '-c', f'import {package}']
                 subprocess.run(cmd, check=True, capture_output=True)
-                print(f"  ✓ {package}")
+                print(f"  [OK] {package}")
             except subprocess.CalledProcessError:
-                print(f"  ✗ {package} - 导入失败")
+                print(f"  [ERROR] {package} - 导入失败")
                 all_ok = False
         
         if all_ok:

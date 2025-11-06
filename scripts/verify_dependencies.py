@@ -35,10 +35,10 @@ def check_imports():
     for module_name, description in dependencies:
         try:
             __import__(module_name)
-            status = "✓ OK"
+            status = "[OK] OK"
             results.append((module_name, description, True))
         except ImportError as e:
-            status = f"✗ FAIL: {e}"
+            status = f"[ERROR] FAIL: {e}"
             results.append((module_name, description, False))
             all_ok = False
         
@@ -48,11 +48,11 @@ def check_imports():
     print("="*70)
     
     if all_ok:
-        print("✓ 所有依赖检查通过！")
+        print("[OK] 所有依赖检查通过！")
         print("="*70)
         return 0
     else:
-        print("✗ 发现缺失的依赖！")
+        print("[ERROR] 发现缺失的依赖！")
         print("="*70)
         print()
         print("失败的依赖:")
@@ -76,7 +76,7 @@ def check_jinja2_detailed():
     
     try:
         import jinja2
-        print(f"✓ Jinja2 已导入")
+        print(f"[OK] Jinja2 已导入")
         print(f"  版本: {jinja2.__version__}")
         print(f"  路径: {jinja2.__file__}")
         
@@ -92,9 +92,9 @@ def check_jinja2_detailed():
         for submodule in submodules:
             try:
                 __import__(submodule)
-                print(f"    ✓ {submodule}")
+                print(f"    [OK] {submodule}")
             except ImportError as e:
-                print(f"    ✗ {submodule}: {e}")
+                print(f"    [ERROR] {submodule}: {e}")
         
         # 尝试创建一个简单的模板
         print("\n  功能测试:")
@@ -102,15 +102,15 @@ def check_jinja2_detailed():
             from jinja2 import Template
             template = Template("Hello {{ name }}!")
             result = template.render(name="World")
-            print(f"    ✓ 模板渲染: {result}")
+            print(f"    [OK] 模板渲染: {result}")
         except Exception as e:
-            print(f"    ✗ 模板渲染失败: {e}")
+            print(f"    [ERROR] 模板渲染失败: {e}")
         
-        print("\n✓ Jinja2 检查完成")
+        print("\n[OK] Jinja2 检查完成")
         return True
         
     except ImportError as e:
-        print(f"✗ Jinja2 导入失败: {e}")
+        print(f"[ERROR] Jinja2 导入失败: {e}")
         print("\n这是打包中最常见的问题！")
         print("解决方法:")
         print("  1. 确保打包脚本包含以下配置:")
@@ -133,13 +133,13 @@ if __name__ == '__main__':
     
     if exit_code != 0 or not jinja2_ok:
         print("\n" + "="*70)
-        print("⚠ 警告：发现问题，打包的程序可能无法正常运行")
+        print("[WARNING] 警告：发现问题，打包的程序可能无法正常运行")
         print("="*70)
         input("\n按回车键退出...")
         sys.exit(1)
     else:
         print("\n" + "="*70)
-        print("✓ 所有检查通过！打包的程序应该可以正常运行")
+        print("[OK] 所有检查通过！打包的程序应该可以正常运行")
         print("="*70)
         input("\n按回车键退出...")
         sys.exit(0)

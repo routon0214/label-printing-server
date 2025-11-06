@@ -94,10 +94,10 @@ def test_raw_text_print():
     success = printer.print_receipt(receipt_data)
     
     if success:
-        print("\n✓ 打印成功！")
+        print("\n[OK] 打印成功！")
         return True
     else:
-        print("\n✗ 打印失败")
+        print("\n[ERROR] 打印失败")
         return False
 
 
@@ -157,10 +157,10 @@ def test_structured_receipt():
     success = printer.print_receipt(receipt_data)
     
     if success:
-        print("\n✓ 打印成功！")
+        print("\n[OK] 打印成功！")
         return True
     else:
-        print("\n✗ 打印失败")
+        print("\n[ERROR] 打印失败")
         return False
 
 
@@ -174,7 +174,7 @@ def main():
     
     # 检查配置
     if not os.path.exists('config/printer_config.json'):
-        print("✗ 配置文件不存在: config/printer_config.json")
+        print("[ERROR] 配置文件不存在: config/printer_config.json")
         print("请先配置打印机")
         input("\n按回车键退出...")
         return
@@ -198,7 +198,7 @@ def main():
         print("  3. 网络连接是否正常")
         
     except Exception as e:
-        print(f"\n✗ 测试失败: {e}")
+        print(f"\n[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
     

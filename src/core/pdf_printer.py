@@ -45,7 +45,7 @@ class PDFPrinter:
             matched_name = fuzzy_search_printer(printer_name)
             if matched_name:
                 if matched_name != printer_name:
-                    print(f"PDF打印机名称解析: '{printer_name}' → '{matched_name}'")
+                    print(f"PDF打印机名称解析: '{printer_name}' -> '{matched_name}'")
                 return matched_name
             else:
                 # 没有找到匹配，返回原名称
@@ -83,12 +83,12 @@ class PDFPrinter:
         
         if is_likely_path and os.path.exists(pdf_data):
             # 文件路径且文件存在
-            print(f"✓ 使用本地文件路径: {pdf_data}")
+            print(f"[OK] 使用本地文件路径: {pdf_data}")
             pdf_file = pdf_data
             temp_file = None
         elif is_likely_path and not os.path.exists(pdf_data):
             # 看起来是文件路径但文件不存在
-            print(f"✗ 错误：文件不存在: {pdf_data}")
+            print(f"[ERROR] 错误：文件不存在: {pdf_data}")
             print("提示：请确保文件路径正确，或使用base64编码发送文件内容")
             return False
         else:
@@ -96,27 +96,27 @@ class PDFPrinter:
             print(f"解码Base64数据（长度: {len(pdf_data):,} 字符）...")
             try:
                 pdf_bytes = base64.b64decode(pdf_data)
-                print(f"✓ 解码成功，字节数: {len(pdf_bytes):,}")
+                print(f"[OK] 解码成功，字节数: {len(pdf_bytes):,}")
                 
                 # 检测文件类型
                 if pdf_bytes.startswith(b'%PDF'):
                     file_ext = '.pdf'
-                    print("✓ 检测到PDF文件")
+                    print("[OK] 检测到PDF文件")
                 elif pdf_bytes.startswith(b'PK\x03\x04'):
                     file_ext = '.docx'
-                    print("✓ 检测到Word文档")
+                    print("[OK] 检测到Word文档")
                 elif pdf_bytes.startswith(b'\xd0\xcf\x11\xe0'):
                     file_ext = '.doc'
-                    print("✓ 检测到旧版Word文档")
+                    print("[OK] 检测到旧版Word文档")
                 else:
                     # 尝试解码为文本
                     try:
                         pdf_bytes.decode('utf-8')
                         file_ext = '.txt'
-                        print("✓ 检测到文本文件")
+                        print("[OK] 检测到文本文件")
                     except:
                         file_ext = '.bin'
-                        print("⚠ 未知文件类型，保存为二进制文件")
+                        print("[WARNING] 未知文件类型，保存为二进制文件")
                 
                 # 创建临时文件
                 temp_file = tempfile.NamedTemporaryFile(suffix=file_ext, delete=False)
@@ -126,7 +126,7 @@ class PDFPrinter:
                 print(f"临时文件已创建: {pdf_file}")
                 
             except Exception as e:
-                print(f"✗ 解码数据失败: {e}")
+                print(f"[ERROR] 解码数据失败: {e}")
                 import traceback
                 traceback.print_exc()
                 return False
@@ -180,7 +180,7 @@ class PDFPrinter:
             for sumatra in sumatra_paths:
                 print(f"  检查: {sumatra}")
                 if os.path.exists(sumatra):
-                    print(f"  ✓ 找到: {sumatra}")
+                    print(f"  [OK] 找到: {sumatra}")
                     sumatra_found = sumatra
                     break
             
@@ -199,13 +199,13 @@ class PDFPrinter:
                     # 启动进程但不等待（因为需要用户交互）
                     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     
-                    print(f"✓ 已打开打印对话框")
+                    print(f"[OK] 已打开打印对话框")
                     print(f"  目标打印机: {printer_name}")
                     print(f"  请在对话框中确认设置并打印")
                     return True
                     
                 except Exception as e:
-                    print(f"✗ SumatraPDF启动失败: {e}")
+                    print(f"[ERROR] SumatraPDF启动失败: {e}")
                     import traceback
                     traceback.print_exc()
                     print(f"  尝试其他打印方案...")
@@ -228,7 +228,7 @@ class PDFPrinter:
                             pdf_file
                         ]
                         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        print(f"✓ 已打开Adobe Reader打印对话框")
+                        print(f"[OK] 已打开Adobe Reader打印对话框")
                         print(f"  请在对话框中选择打印机: {printer_name}")
                         return True
                     except Exception as e:
@@ -242,7 +242,7 @@ class PDFPrinter:
                     # notepad /p 会显示打印对话框
                     cmd = ['notepad', '/p', pdf_file]
                     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    print(f"✓ 已打开notepad打印对话框")
+                    print(f"[OK] 已打开notepad打印对话框")
                     print(f"  请在对话框中选择打印机: {printer_name}")
                     return True
                 except Exception as e:
@@ -255,7 +255,7 @@ class PDFPrinter:
             
             # 方案5: 提示用户安装工具
             print("\n" + "=" * 60)
-            print("⚠ 未找到合适的PDF打印工具")
+            print("[WARNING] 未找到合适的PDF打印工具")
             print("=" * 60)
             print("\n为了打印PDF文档，请安装以下工具之一：")
             print("\n1. SumatraPDF（推荐）⭐")
@@ -271,10 +271,10 @@ class PDFPrinter:
             return False
             
         except ImportError:
-            print("✗ 错误：需要安装 pywin32: pip install pywin32")
+            print("[ERROR] 错误：需要安装 pywin32: pip install pywin32")
             return False
         except Exception as e:
-            print(f"✗ Windows打印失败: {e}")
+            print(f"[ERROR] Windows打印失败: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -306,14 +306,14 @@ class PDFPrinter:
                 win32print.EndPagePrinter(printer_handle)
                 win32print.EndDocPrinter(printer_handle)
                 
-                print(f"✓ RAW打印成功: {printer_name}")
+                print(f"[OK] RAW打印成功: {printer_name}")
                 return True
                 
             finally:
                 win32print.ClosePrinter(printer_handle)
                 
         except Exception as e:
-            print(f"✗ RAW打印失败: {e}")
+            print(f"[ERROR] RAW打印失败: {e}")
             return False
     
     def _print_linux(self, pdf_file, printer_name):
@@ -330,16 +330,16 @@ class PDFPrinter:
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode == 0:
-                print(f"✓ Linux PDF打印成功: {printer_name or '默认打印机'}")
+                print(f"[OK] Linux PDF打印成功: {printer_name or '默认打印机'}")
                 return True
             else:
-                print(f"✗ Linux PDF打印失败: {result.stderr}")
+                print(f"[ERROR] Linux PDF打印失败: {result.stderr}")
                 return False
                 
         except FileNotFoundError:
             print("错误：未找到lpr命令，请安装CUPS")
             return False
         except Exception as e:
-            print(f"✗ Linux PDF打印失败: {e}")
+            print(f"[ERROR] Linux PDF打印失败: {e}")
             return False
 

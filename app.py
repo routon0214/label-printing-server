@@ -123,7 +123,7 @@ def main():
             uvicorn.run(web_app.app, host="0.0.0.0", port=5000, log_level="info")
             return 0
         except ImportError as e:
-            print("\n✗ 错误: 无法导入web_app模块")
+            print("\n[ERROR] 错误: 无法导入web_app模块")
             print(f"详细错误: {e}")
             print("请确保已安装所有依赖: pip install -r requirements.txt")
             wait_for_user_exit()
@@ -132,7 +132,7 @@ def main():
             print("\n\nWeb服务已停止")
             return 0
         except Exception as e:
-            print(f"\n✗ Web服务启动失败: {e}")
+            print(f"\n[ERROR] Web服务启动失败: {e}")
             import traceback
             traceback.print_exc()
             wait_for_user_exit()

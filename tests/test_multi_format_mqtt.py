@@ -42,7 +42,7 @@ def create_test_files():
     with open(txt_file, 'w', encoding='utf-8') as f:
         f.write(txt_content)
     test_files['txt'] = txt_file
-    print(f"   ✓ 创建: {txt_file}")
+    print(f"   [OK] 创建: {txt_file}")
     
     # 2. 创建测试 PDF 文件
     print("\n2. 创建 PDF 文件...")
@@ -70,12 +70,12 @@ def create_test_files():
         c.save()
         
         test_files['pdf'] = pdf_file
-        print(f"   ✓ 创建: {pdf_file}")
+        print(f"   [OK] 创建: {pdf_file}")
     except ImportError:
-        print("   ⚠ reportlab 未安装，使用现有 PDF 文件")
+        print("   [WARNING] reportlab 未安装，使用现有 PDF 文件")
         if os.path.exists("test_document_simple.pdf"):
             test_files['pdf'] = "test_document_simple.pdf"
-            print(f"   ✓ 使用: test_document_simple.pdf")
+            print(f"   [OK] 使用: test_document_simple.pdf")
     
     # 3. 创建 ZPL 标签代码
     print("\n3. 创建 ZPL 标签...")
@@ -90,7 +90,7 @@ def create_test_files():
     with open(zpl_file, 'w', encoding='utf-8') as f:
         f.write(zpl_content)
     test_files['zpl'] = zpl_file
-    print(f"   ✓ 创建: {zpl_file}")
+    print(f"   [OK] 创建: {zpl_file}")
     
     # 4. 创建 ESC/POS 小票
     print("\n4. 创建 ESC/POS 小票数据...")
@@ -106,7 +106,7 @@ def create_test_files():
         "time": time.strftime("%Y-%m-%d %H:%M:%S")
     }
     test_files['escpos'] = escpos_data
-    print(f"   ✓ 创建: ESC/POS 数据结构")
+    print(f"   [OK] 创建: ESC/POS 数据结构")
     
     # 5. 创建测试图片
     print("\n5. 创建 JPG 图片...")
@@ -127,9 +127,9 @@ def create_test_files():
         jpg_file = "test_image.jpg"
         img.save(jpg_file, 'JPEG')
         test_files['jpg'] = jpg_file
-        print(f"   ✓ 创建: {jpg_file}")
+        print(f"   [OK] 创建: {jpg_file}")
     except ImportError:
-        print("   ⚠ PIL/Pillow 未安装，跳过图片创建")
+        print("   [WARNING] PIL/Pillow 未安装，跳过图片创建")
     
     # 6. DOC/DOCX（这里我们创建 RTF 格式，兼容性更好）
     print("\n6. 创建 DOC 文件（RTF格式）...")
@@ -149,10 +149,10 @@ It should be printable on most printers.\par
     with open(doc_file, 'w', encoding='utf-8') as f:
         f.write(rtf_content)
     test_files['doc'] = doc_file
-    print(f"   ✓ 创建: {doc_file}")
+    print(f"   [OK] 创建: {doc_file}")
     
     print("\n" + "="*70)
-    print(f"✓ 共创建 {len(test_files)} 个测试文件")
+    print(f"[OK] 共创建 {len(test_files)} 个测试文件")
     print("="*70)
     
     return test_files
@@ -193,7 +193,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
             }
             result = client.publish(topic, json.dumps(message))
             print(f"  消息ID: {result.mid}")
-            print(f"  状态: {'✓ 已发送' if result.rc == 0 else '✗ 发送失败'}")
+            print(f"  状态: {'[OK] 已发送' if result.rc == 0 else '[ERROR] 发送失败'}")
             results.append(('TXT', result.rc == 0))
             time.sleep(2)
         
@@ -209,7 +209,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
             }
             result = client.publish(topic, json.dumps(message))
             print(f"  消息ID: {result.mid}")
-            print(f"  状态: {'✓ 已发送' if result.rc == 0 else '✗ 发送失败'}")
+            print(f"  状态: {'[OK] 已发送' if result.rc == 0 else '[ERROR] 发送失败'}")
             results.append(('PDF', result.rc == 0))
             time.sleep(2)
         
@@ -226,7 +226,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
             }
             result = client.publish(topic, json.dumps(message))
             print(f"  消息ID: {result.mid}")
-            print(f"  状态: {'✓ 已发送' if result.rc == 0 else '✗ 发送失败'}")
+            print(f"  状态: {'[OK] 已发送' if result.rc == 0 else '[ERROR] 发送失败'}")
             results.append(('ZPL', result.rc == 0))
             time.sleep(2)
         
@@ -243,7 +243,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
             }
             result = client.publish(topic, json.dumps(message))
             print(f"  消息ID: {result.mid}")
-            print(f"  状态: {'✓ 已发送' if result.rc == 0 else '✗ 发送失败'}")
+            print(f"  状态: {'[OK] 已发送' if result.rc == 0 else '[ERROR] 发送失败'}")
             results.append(('ESC/POS', result.rc == 0))
             time.sleep(2)
         
@@ -259,7 +259,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
             }
             result = client.publish(topic, json.dumps(message))
             print(f"  消息ID: {result.mid}")
-            print(f"  状态: {'✓ 已发送' if result.rc == 0 else '✗ 发送失败'}")
+            print(f"  状态: {'[OK] 已发送' if result.rc == 0 else '[ERROR] 发送失败'}")
             results.append(('JPG', result.rc == 0))
             time.sleep(2)
         
@@ -275,7 +275,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
             }
             result = client.publish(topic, json.dumps(message))
             print(f"  消息ID: {result.mid}")
-            print(f"  状态: {'✓ 已发送' if result.rc == 0 else '✗ 发送失败'}")
+            print(f"  状态: {'[OK] 已发送' if result.rc == 0 else '[ERROR] 发送失败'}")
             results.append(('DOC', result.rc == 0))
             time.sleep(2)
         
@@ -286,7 +286,7 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
         print("测试结果汇总")
         print("="*70)
         for format_type, success in results:
-            status = "✓ 已发送" if success else "✗ 失败"
+            status = "[OK] 已发送" if success else "[ERROR] 失败"
             print(f"  {format_type:12s} {status}")
         
         print("\n说明:")
@@ -298,11 +298,11 @@ def send_mqtt_test(test_files, broker_host='127.0.0.1', broker_port=1883, topic=
         return all(success for _, success in results)
         
     except ImportError:
-        print("✗ 错误：需要安装 paho-mqtt")
+        print("[ERROR] 错误：需要安装 paho-mqtt")
         print("  运行: pip install paho-mqtt")
         return False
     except Exception as e:
-        print(f"✗ 发送失败: {e}")
+        print(f"[ERROR] 发送失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -348,13 +348,13 @@ def main():
     
     print("\n" + "="*70)
     if success:
-        print("✓ 测试完成")
+        print("[OK] 测试完成")
         print("\n后续步骤:")
         print("  1. 检查打印服务端日志输出")
         print("  2. 确认各个打印机是否有输出")
         print("  3. 验证打印内容是否正确")
     else:
-        print("✗ 测试失败，请检查错误信息")
+        print("[ERROR] 测试失败，请检查错误信息")
     print("="*70)
     
     return 0 if success else 1

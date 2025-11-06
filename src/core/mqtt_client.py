@@ -120,7 +120,7 @@ class LabelPrintMQTT:
             
             # 验证配置
             if not types:
-                print(f"  ⚠ 警告: 打印机 {name} 未指定类型，跳过")
+                print(f"  [WARNING] 警告: 打印机 {name} 未指定类型，跳过")
                 continue
             
             print(f"  配置打印机: {name} - 类型: {types}")
@@ -133,7 +133,7 @@ class LabelPrintMQTT:
             for print_type in types:
                 if print_type == '*':
                     # 通用打印机，作为备选打印机（只有在找不到专用打印机时才使用）
-                    print(f"    ✓ {name} 设置为通用打印机（备选）")
+                    print(f"    [OK] {name} 设置为通用打印机（备选）")
                     self.fallback_printer_config = printer_cfg
                     supported_formats = ['label(ZPL)', 'pdf', 'receipt(ESC/POS)']
                     break  # 通配符不需要继续处理其他类型
@@ -141,28 +141,28 @@ class LabelPrintMQTT:
                     # 只有当该类型还没有专用打印机时才设置
                     if 'label' not in self.printer_map:
                         self.printer_map['label'] = self._create_zebra_printer(printer_cfg)
-                        print(f"    ✓ 标签打印（专用） → {name}")
+                        print(f"    [OK] 标签打印（专用） -> {name}")
                         supported_formats.append('label(ZPL)')
                     else:
-                        print(f"    ⚠ 标签打印机已存在，跳过 {name}")
+                        print(f"    [WARNING] 标签打印机已存在，跳过 {name}")
                 elif print_type == 'pdf':
                     if 'pdf' not in self.printer_map:
                         self.printer_map['pdf'] = self._create_pdf_printer(printer_cfg)
-                        print(f"    ✓ PDF打印（专用） → {name}")
+                        print(f"    [OK] PDF打印（专用） -> {name}")
                         supported_formats.append('pdf')
                     else:
-                        print(f"    ⚠ PDF打印机已存在，跳过 {name}")
+                        print(f"    [WARNING] PDF打印机已存在，跳过 {name}")
                 elif print_type in ['receipt', 'escpos']:
                     if not receipt_configured and 'receipt' not in self.printer_map:
                         self.printer_map['receipt'] = self._create_escpos_printer(printer_cfg)
                         self.printer_map['escpos'] = self.printer_map['receipt']
-                        print(f"    ✓ 小票打印（专用） → {name}")
+                        print(f"    [OK] 小票打印（专用） -> {name}")
                         supported_formats.append('receipt(ESC/POS)')
                         receipt_configured = True
                     else:
-                        print(f"    ⚠ 小票打印机已存在，跳过 {name}")
+                        print(f"    [WARNING] 小票打印机已存在，跳过 {name}")
                 else:
-                    print(f"    ⚠ 未知的打印类型: {print_type}")
+                    print(f"    [WARNING] 未知的打印类型: {print_type}")
             
             # 保存打印机信息
             printer_info = {
@@ -270,12 +270,12 @@ class LabelPrintMQTT:
             logger.info(f"on_connect回调被触发 - rc={rc}, flags={flags}")
         
         if rc == 0:
-            print("  ✓ 连接成功！")
+            print("  [OK] 连接成功！")
             self.is_connected = True
             self.connection_error = None
             # 重置重连计数器（连接成功后）
             if self.reconnect_count > 0:
-                print(f"  ✓ 重连成功！（共尝试 {self.reconnect_count} 次）")
+                print(f"  [OK] 重连成功！（共尝试 {self.reconnect_count} 次）")
                 if logger:
                     logger.info(f"重连成功！共尝试了 {self.reconnect_count} 次")
             self.reconnect_count = 0
@@ -289,7 +289,7 @@ class LabelPrintMQTT:
                             logger.info(f"获取到自动生成的客户端ID: {self.client_id}")
                 except:
                     pass
-            msg = f"✓ 已连接到MQTT服务器: {self.broker_host}:{self.broker_port}"
+            msg = f"[OK] 已连接到MQTT服务器: {self.broker_host}:{self.broker_port}"
             if self.client_id:
                 msg += f" (客户端ID: {self.client_id})"
             print(msg)
@@ -303,18 +303,18 @@ class LabelPrintMQTT:
             # 订阅主题，QoS=0
             result, mid = client.subscribe(self.topic, 0)
             if result == 0:
-                msg = f"✓ 订阅请求已发送 (消息ID: {mid})"
+                msg = f"[OK] 订阅请求已发送 (消息ID: {mid})"
                 print(msg)
                 if logger:
                     logger.info(msg)
             else:
                 error_msg = f"订阅失败，错误码: {result}"
-                print(f"✗ {error_msg}")
+                print(f"[ERROR] {error_msg}")
                 self.connection_error = error_msg
                 if logger:
                     logger.error(error_msg)
         else:
-            print(f"  ✗ 连接失败！")
+            print(f"  [ERROR] 连接失败！")
             self.is_connected = False
             error_messages = {
                 1: "协议版本不正确",
@@ -325,7 +325,7 @@ class LabelPrintMQTT:
             }
             error_msg = error_messages.get(rc, f"未知错误码: {rc}")
             self.connection_error = error_msg
-            msg = f"✗ 连接失败，错误码: {rc} - {error_msg}"
+            msg = f"[ERROR] 连接失败，错误码: {rc} - {error_msg}"
             print(msg)
             if logger:
                 logger.error(msg)
@@ -333,8 +333,8 @@ class LabelPrintMQTT:
     
     def on_subscribe(self, client, userdata, mid, granted_qos):
         """订阅回调"""
-        msg1 = f"✓ 订阅成功确认 (消息ID: {mid}, QoS: {granted_qos})"
-        msg2 = f"✓ 主题: {self.topic}"
+        msg1 = f"[OK] 订阅成功确认 (消息ID: {mid}, QoS: {granted_qos})"
+        msg2 = f"[OK] 主题: {self.topic}"
         msg3 = "服务已就绪，等待打印任务..."
         print(msg1)
         print(msg2)
@@ -363,7 +363,7 @@ class LabelPrintMQTT:
                     logger.debug(f"消息内容预览: {preview}")
             except Exception as decode_error:
                 error_msg = f"消息解码失败: {decode_error}"
-                print(f"✗ {error_msg}")
+                print(f"[ERROR] {error_msg}")
                 print(f"原始数据: {msg.payload[:100]}")
                 if logger:
                     logger.error(f"{error_msg}, 原始数据: {msg.payload[:100]}")
@@ -385,7 +385,7 @@ class LabelPrintMQTT:
                 # 获取对应的打印机（优先专用，找不到用通用）
                 pdf_printer = self._get_printer('pdf')
                 if not pdf_printer:
-                    print("✗ 错误：未配置PDF打印机")
+                    print("[ERROR] 错误：未配置PDF打印机")
                     success = False
                 else:
                     # 判断是使用专用还是通用打印机
@@ -398,7 +398,7 @@ class LabelPrintMQTT:
                     printer_name = data.get('printer')
                     
                     if not pdf_data:
-                        print("✗ 错误：缺少PDF数据")
+                        print("[ERROR] 错误：缺少PDF数据")
                         success = False
                     else:
                         success = pdf_printer.print_pdf(pdf_data, printer_name)
@@ -407,7 +407,7 @@ class LabelPrintMQTT:
                 if success:
                     print(f"{'='*60}\n")
                 else:
-                    print("✗ PDF打印失败")
+                    print("[ERROR] PDF打印失败")
                     print(f"{'='*60}\n")
             
             elif print_type == 'receipt' or print_type == 'escpos':
@@ -417,7 +417,7 @@ class LabelPrintMQTT:
                 # 获取对应的打印机（优先专用，找不到用通用）
                 receipt_printer = self._get_printer('receipt')
                 if not receipt_printer:
-                    print("✗ 错误：未配置ESC/POS打印机")
+                    print("[ERROR] 错误：未配置ESC/POS打印机")
                     success = False
                 else:
                     # 判断是使用专用还是通用打印机
@@ -438,7 +438,7 @@ class LabelPrintMQTT:
                 if success:
                     print(f"{'='*60}\n")
                 else:
-                    print("✗ ESC/POS打印失败")
+                    print("[ERROR] ESC/POS打印失败")
                     print(f"{'='*60}\n")
                     
             else:
@@ -448,7 +448,7 @@ class LabelPrintMQTT:
                 # 获取对应的打印机（优先专用，找不到用通用）
                 label_printer = self._get_printer('label')
                 if not label_printer:
-                    print("✗ 错误：未配置标签打印机")
+                    print("[ERROR] 错误：未配置标签打印机")
                     success = False
                 else:
                     # 判断是使用专用还是通用打印机
@@ -488,9 +488,9 @@ class LabelPrintMQTT:
                     print(f"{'='*60}\n")
                 
         except json.JSONDecodeError as e:
-            print(f"✗ JSON解析失败: {e}")
+            print(f"[ERROR] JSON解析失败: {e}")
         except Exception as e:
-            print(f"✗ 处理消息失败: {e}")
+            print(f"[ERROR] 处理消息失败: {e}")
             import traceback
             traceback.print_exc()
     
@@ -505,7 +505,7 @@ class LabelPrintMQTT:
         if rc != 0:
             # 意外断开
             self.connection_error = f"意外断开，错误码: {rc}"
-            msg = f"✗ 意外断开连接，错误码: {rc}"
+            msg = f"[ERROR] 意外断开连接，错误码: {rc}"
             print(msg)
             if logger:
                 logger.warning(msg)
@@ -542,7 +542,7 @@ class LabelPrintMQTT:
                             if logger:
                                 logger.info("reconnect() 调用完成")
                         except Exception as e:
-                            print(f"✗ 重连失败: {e}")
+                            print(f"[ERROR] 重连失败: {e}")
                             if logger:
                                 logger.error(f"重连失败: {e}")
                 
@@ -551,7 +551,7 @@ class LabelPrintMQTT:
         else:
             # 正常断开（主动断开）
             self.connection_error = None
-            msg = "✓ 正常断开连接"
+            msg = "[OK] 正常断开连接"
             print(msg)
             if logger:
                 logger.info(msg)
@@ -682,19 +682,19 @@ class LabelPrintMQTT:
                     if logger:
                         logger.info(f"创建WebSocket客户端 - 客户端ID: {self.client_id}")
                     self.client = mqtt.Client(client_id=self.client_id, transport=transport)
-                    print("  ✓ 客户端实例已创建")
+                    print("  [OK] 客户端实例已创建")
                     if logger:
-                        logger.info(f"✓ WebSocket客户端已创建，使用客户端ID: {self.client_id}")
+                        logger.info(f"[OK] WebSocket客户端已创建，使用客户端ID: {self.client_id}")
                 else:
                     # 不传client_id，让paho-mqtt自动生成
                     print(f"  客户端ID: 自动生成")
                     if logger:
                         logger.info("创建WebSocket客户端 - 客户端ID将自动生成")
                     self.client = mqtt.Client(transport=transport)
-                    print("  ✓ 客户端实例已创建")
+                    print("  [OK] 客户端实例已创建")
                     # paho-mqtt会自动生成client_id，我们稍后可以从客户端获取
                     if logger:
-                        logger.info("✓ WebSocket客户端已创建，客户端ID将自动生成")
+                        logger.info("[OK] WebSocket客户端已创建，客户端ID将自动生成")
                 
                 # 设置WebSocket选项
                 try:
@@ -728,19 +728,19 @@ class LabelPrintMQTT:
                     if logger:
                         logger.info(f"创建TCP客户端 - 客户端ID: {self.client_id}")
                     self.client = mqtt.Client(client_id=self.client_id)
-                    print("  ✓ 客户端实例已创建")
+                    print("  [OK] 客户端实例已创建")
                     if logger:
-                        logger.info(f"✓ TCP客户端已创建，使用客户端ID: {self.client_id}")
+                        logger.info(f"[OK] TCP客户端已创建，使用客户端ID: {self.client_id}")
                 else:
                     # 不传client_id，让paho-mqtt自动生成
                     print(f"  客户端ID: 自动生成")
                     if logger:
                         logger.info("创建TCP客户端 - 客户端ID将自动生成")
                     self.client = mqtt.Client()
-                    print("  ✓ 客户端实例已创建")
+                    print("  [OK] 客户端实例已创建")
                     # paho-mqtt会自动生成client_id，我们稍后可以从客户端获取
                     if logger:
-                        logger.info("✓ TCP客户端已创建，客户端ID将自动生成")
+                        logger.info("[OK] TCP客户端已创建，客户端ID将自动生成")
             
             # 设置回调函数
             print("  设置MQTT回调函数...")
@@ -748,25 +748,25 @@ class LabelPrintMQTT:
             self.client.on_message = self.on_message
             self.client.on_disconnect = self.on_disconnect
             self.client.on_subscribe = self.on_subscribe
-            print("  ✓ 回调函数已设置 (on_connect, on_message, on_disconnect, on_subscribe)")
+            print("  [OK] 回调函数已设置 (on_connect, on_message, on_disconnect, on_subscribe)")
             
             # 启用日志回调（用于调试）
             if logger:
                 self.client.on_log = self.on_log
-                print("  ✓ 日志回调已启用")
-                logger.info("✓ MQTT回调函数已设置（包括日志回调）")
+                print("  [OK] 日志回调已启用")
+                logger.info("[OK] MQTT回调函数已设置（包括日志回调）")
                 # 设置日志级别（可选，用于调试）
                 # self.client.enable_logger(logger)
             else:
-                print("  ⚠ 日志模块未加载，日志回调未启用")
+                print("  [WARNING] 日志模块未加载，日志回调未启用")
             
             # 设置认证
             if self.username and self.password:
                 print(f"  设置认证信息 (用户名: {self.username})...")
                 self.client.username_pw_set(self.username, self.password)
-                print("  ✓ 认证信息已设置")
+                print("  [OK] 认证信息已设置")
                 if logger:
-                    logger.info(f"✓ MQTT认证已配置 - 用户名: {self.username}")
+                    logger.info(f"[OK] MQTT认证已配置 - 用户名: {self.username}")
             else:
                 print("  认证: 无（匿名连接）")
                 if logger:
@@ -814,27 +814,27 @@ class LabelPrintMQTT:
                     error_msg = f"启用SSL/TLS失败: {tls_error}"
                     if logger:
                         logger.error(error_msg)
-                    print(f"⚠ 警告：{error_msg}")
+                    print(f"[WARNING] 警告：{error_msg}")
                     # 对于某些自签名证书，可以尝试不验证证书（仅用于测试）
                     try:
                         import ssl
                         self.client.tls_set(cert_reqs=ssl.CERT_NONE)
                         if logger:
                             logger.warning("使用不验证证书的SSL/TLS模式（仅用于测试）")
-                        print("⚠ 使用不验证证书的SSL模式（仅用于测试）")
+                        print("[WARNING] 使用不验证证书的SSL模式（仅用于测试）")
                     except Exception as tls_fallback_error:
                         if logger:
                             logger.error(f"SSL/TLS回退模式也失败: {tls_fallback_error}")
-                        print(f"✗ SSL/TLS配置失败，连接可能无法建立")
+                        print(f"[ERROR] SSL/TLS配置失败，连接可能无法建立")
             
             # 启动非阻塞循环（在连接前启动，以便处理连接回调）
             print("\n[步骤1] 启动MQTT事件循环...")
             if logger:
                 logger.info("启动MQTT事件循环 (loop_start)")
             self.client.loop_start()
-            print("  ✓ 事件循环已启动")
+            print("  [OK] 事件循环已启动")
             if logger:
-                logger.info("✓ MQTT事件循环已启动")
+                logger.info("[OK] MQTT事件循环已启动")
             
             try:
                 # 对于WebSocket连接，需要确保在连接前所有设置都完成
@@ -863,7 +863,7 @@ class LabelPrintMQTT:
                         test_socket.close()
                         if test_result != 0:
                             error_msg = f"网络连接测试失败，无法连接到 {self.broker_host}:{self.broker_port}"
-                            print(f"  ✗ {error_msg} (错误码: {test_result})")
+                            print(f"  [ERROR] {error_msg} (错误码: {test_result})")
                             if logger:
                                 logger.error(f"{error_msg} (错误码: {test_result})")
                             self.connection_error = error_msg
@@ -879,11 +879,11 @@ class LabelPrintMQTT:
                             print("="*70 + "\n")
                             return
                         else:
-                            print(f"  ✓ 网络连接测试通过，服务器可达")
+                            print(f"  [OK] 网络连接测试通过，服务器可达")
                             if logger:
-                                logger.info(f"✓ 网络连接测试通过，服务器可达")
+                                logger.info(f"[OK] 网络连接测试通过，服务器可达")
                     except Exception as test_error:
-                        print(f"  ⚠ 网络测试异常: {test_error}，继续尝试MQTT连接")
+                        print(f"  [WARNING] 网络测试异常: {test_error}，继续尝试MQTT连接")
                         if logger:
                             logger.warning(f"网络连接测试异常: {test_error}，继续尝试MQTT连接")
                 
@@ -898,7 +898,7 @@ class LabelPrintMQTT:
                 
                 try:
                     result = self.client.connect(self.broker_host, self.broker_port, 60)
-                    print(f"  ✓ connect() 调用完成")
+                    print(f"  [OK] connect() 调用完成")
                     print(f"  返回码: {result} {'(0=成功)' if result == 0 else '(错误)'}")
                     
                     if logger:
@@ -906,7 +906,7 @@ class LabelPrintMQTT:
                         if result != 0:
                             logger.error(f"连接调用返回错误码: {result}")
                 except Exception as connect_ex:
-                    print(f"  ✗ connect() 调用异常: {connect_ex}")
+                    print(f"  [ERROR] connect() 调用异常: {connect_ex}")
                     if logger:
                         logger.error(f"connect()调用异常: {connect_ex}")
                     import traceback
@@ -925,7 +925,7 @@ class LabelPrintMQTT:
                     error_msg = error_messages.get(result, f"连接失败，错误码: {result}")
                     self.connection_error = error_msg
                     self.is_connected = False
-                    print(f"✗ {error_msg}")
+                    print(f"[ERROR] {error_msg}")
                     self.client.loop_stop()
                     return
                 
@@ -943,7 +943,7 @@ class LabelPrintMQTT:
                 while not self.is_connected and (time.time() - start_time) < timeout:
                     if self.connection_error:
                         # 如果有错误信息，说明连接失败
-                        print(f"✗ {self.connection_error}")
+                        print(f"[ERROR] {self.connection_error}")
                         if logger:
                             logger.error(f"连接过程中出错: {self.connection_error}")
                         self.client.loop_stop()
@@ -988,7 +988,7 @@ class LabelPrintMQTT:
                         self.connection_error = f"连接超时（{timeout}秒），请检查服务器地址和端口{protocol_hint}"
                     
                     print("\n" + "="*70)
-                    print("✗ MQTT连接失败")
+                    print("[ERROR] MQTT连接失败")
                     print("="*70)
                     print(f"错误: {self.connection_error}")
                     print(f"\n连接信息:")
@@ -1023,7 +1023,7 @@ class LabelPrintMQTT:
                     return
                 
                 print("\n" + "="*70)
-                print("✓ MQTT服务已启动，等待打印任务...")
+                print("[OK] MQTT服务已启动，等待打印任务...")
                 print("  自动重连: 已启用")
                 print(f"  重连延迟: {self.reconnect_delay} 秒（首次），最大 {self.max_reconnect_delay} 秒")
                 print("="*70 + "\n")
@@ -1070,7 +1070,7 @@ class LabelPrintMQTT:
                 # 连接异常（如网络错误）
                 self.connection_error = f"连接异常: {str(conn_error)}"
                 self.is_connected = False
-                print(f"✗ 连接异常: {conn_error}")
+                print(f"[ERROR] 连接异常: {conn_error}")
                 import traceback
                 traceback.print_exc()
                 if self.client:
@@ -1111,7 +1111,7 @@ class LabelPrintMQTT:
                 # 停止事件循环
                 print("  停止事件循环...")
                 self.client.loop_stop()
-                print("  ✓ 事件循环已停止")
+                print("  [OK] 事件循环已停止")
                 if logger:
                     logger.info("MQTT事件循环已停止")
                 
@@ -1119,7 +1119,7 @@ class LabelPrintMQTT:
                 if self.is_connected:
                     print("  断开连接...")
                     self.client.disconnect()
-                    print("  ✓ 连接已断开")
+                    print("  [OK] 连接已断开")
                     if logger:
                         logger.info("MQTT连接已断开")
                 
@@ -1127,12 +1127,12 @@ class LabelPrintMQTT:
                 self.connection_error = None
                 
             except Exception as e:
-                print(f"  ⚠ 停止过程中出现异常: {e}")
+                print(f"  [WARNING] 停止过程中出现异常: {e}")
                 if logger:
                     logger.warning(f"停止MQTT客户端时出现异常: {e}")
         
         print("="*70)
-        print("✓ MQTT客户端已停止")
+        print("[OK] MQTT客户端已停止")
         print("="*70 + "\n")
         
         if logger:

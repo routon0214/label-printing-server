@@ -49,7 +49,7 @@ def test_url_parsing():
             config = parse_mqtt_url(url, {'topic': 'zebra/print'})
             
             if not config:
-                print(f"  ✗ 解析失败：返回空配置")
+                print(f"  [ERROR] 解析失败：返回空配置")
                 all_passed = False
                 print()
                 continue
@@ -59,10 +59,10 @@ def test_url_parsing():
             missing_fields = [f for f in required_fields if f not in config]
             
             if missing_fields:
-                print(f"  ✗ 缺少字段: {', '.join(missing_fields)}")
+                print(f"  [ERROR] 缺少字段: {', '.join(missing_fields)}")
                 all_passed = False
             else:
-                print(f"  ✓ 解析成功:")
+                print(f"  [OK] 解析成功:")
                 print(f"    主机: {config['host']}")
                 print(f"    端口: {config['port']}")
                 print(f"    协议: {config['protocol']}")
@@ -73,7 +73,7 @@ def test_url_parsing():
                     print(f"    密码: {'*' * len(str(config['password']))}")
             
         except Exception as e:
-            print(f"  ✗ 解析异常: {e}")
+            print(f"  [ERROR] 解析异常: {e}")
             import traceback
             traceback.print_exc()
             all_passed = False
@@ -82,9 +82,9 @@ def test_url_parsing():
     
     print("=" * 70)
     if all_passed:
-        print("✓ 所有URL格式解析测试通过！")
+        print("[OK] 所有URL格式解析测试通过！")
     else:
-        print("✗ 部分URL格式解析测试失败")
+        print("[ERROR] 部分URL格式解析测试失败")
     print("=" * 70)
     
     return all_passed
@@ -133,19 +133,19 @@ def test_expected_results():
         for key, expected_value in expected.items():
             actual_value = config.get(key)
             if actual_value != expected_value:
-                print(f"  ✗ {key}: 期望 {expected_value}, 实际 {actual_value}")
+                print(f"  [ERROR] {key}: 期望 {expected_value}, 实际 {actual_value}")
                 failed = True
                 all_passed = False
         
         if not failed:
-            print(f"  ✓ 所有字段匹配")
+            print(f"  [OK] 所有字段匹配")
     
     print()
     print("=" * 70)
     if all_passed:
-        print("✓ 预期结果验证通过！")
+        print("[OK] 预期结果验证通过！")
     else:
-        print("✗ 预期结果验证失败")
+        print("[ERROR] 预期结果验证失败")
     print("=" * 70)
     
     return all_passed

@@ -78,19 +78,19 @@ def test_mqtt_receive():
         
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
-                print("✓ 连接成功")
+                print("[OK] 连接成功")
                 print(f"正在订阅主题: {topic}")
                 result, mid = client.subscribe(topic, 0)
                 if result == 0:
-                    print(f"✓ 订阅请求已发送 (消息ID: {mid})")
+                    print(f"[OK] 订阅请求已发送 (消息ID: {mid})")
                 else:
-                    print(f"✗ 订阅失败，错误码: {result}")
+                    print(f"[ERROR] 订阅失败，错误码: {result}")
             else:
-                print(f"✗ 连接失败，错误码: {rc}")
+                print(f"[ERROR] 连接失败，错误码: {rc}")
         
         def on_subscribe(client, userdata, mid, granted_qos):
-            print(f"✓ 订阅成功确认 (消息ID: {mid}, QoS: {granted_qos})")
-            print(f"✓ 主题: {topic}")
+            print(f"[OK] 订阅成功确认 (消息ID: {mid}, QoS: {granted_qos})")
+            print(f"[OK] 主题: {topic}")
             print()
             print("=" * 70)
             print("等待接收消息...")
@@ -117,14 +117,14 @@ def test_mqtt_receive():
                     print(f"JSON解析成功:")
                     print(json.dumps(data, ensure_ascii=False, indent=2))
                 except json.JSONDecodeError:
-                    print("⚠ 不是有效的JSON格式")
+                    print("[WARNING] 不是有效的JSON格式")
             except Exception as e:
-                print(f"✗ 解码失败: {e}")
+                print(f"[ERROR] 解码失败: {e}")
             print("-" * 70)
         
         def on_disconnect(client, userdata, rc):
             if rc != 0:
-                print(f"\n✗ 意外断开连接 (错误码: {rc})")
+                print(f"\n[ERROR] 意外断开连接 (错误码: {rc})")
         
         client.on_connect = on_connect
         client.on_subscribe = on_subscribe
@@ -141,7 +141,7 @@ def test_mqtt_receive():
             
             result = client.connect(host, port, 60)
             if result != 0:
-                print(f"✗ 连接调用失败，返回码: {result}")
+                print(f"[ERROR] 连接调用失败，返回码: {result}")
                 client.loop_stop()
                 return False
             
@@ -160,18 +160,18 @@ def test_mqtt_receive():
                 return True
                 
         except Exception as e:
-            print(f"✗ 连接异常: {e}")
+            print(f"[ERROR] 连接异常: {e}")
             import traceback
             traceback.print_exc()
             client.loop_stop()
             return False
             
     except ImportError:
-        print("✗ 错误：需要安装 paho-mqtt 库")
+        print("[ERROR] 错误：需要安装 paho-mqtt 库")
         print("  运行: pip install paho-mqtt")
         return False
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print(f"[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False

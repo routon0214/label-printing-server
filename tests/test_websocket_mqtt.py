@@ -53,7 +53,7 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
         
         # 检查是否支持WebSocket
         if protocol not in ['ws', 'wss']:
-            print(f"✗ 错误：URL协议必须是 ws:// 或 wss://，当前是 {protocol}://")
+            print(f"[ERROR] 错误：URL协议必须是 ws:// 或 wss://，当前是 {protocol}://")
             return False
         
         # 创建WebSocket客户端
@@ -65,15 +65,15 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
         print(f"设置WebSocket路径: {ws_path}")
         try:
             client.ws_set_options(path=ws_path)
-            print("✓ WebSocket选项设置成功")
+            print("[OK] WebSocket选项设置成功")
         except Exception as e:
-            print(f"✗ 设置WebSocket选项失败: {e}")
+            print(f"[ERROR] 设置WebSocket选项失败: {e}")
             return False
         
         # 设置认证
         if username and password:
             client.username_pw_set(username, password)
-            print(f"✓ 已设置认证信息")
+            print(f"[OK] 已设置认证信息")
         
         # 连接状态
         connected = False
@@ -84,7 +84,7 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
             nonlocal connected, connection_error
             if rc == 0:
                 connected = True
-                print(f"✓ 连接成功！")
+                print(f"[OK] 连接成功！")
             else:
                 error_messages = {
                     1: "协议版本不正确",
@@ -94,12 +94,12 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
                     5: "未授权"
                 }
                 connection_error = error_messages.get(rc, f"未知错误码: {rc}")
-                print(f"✗ 连接失败: {connection_error} (错误码: {rc})")
+                print(f"[ERROR] 连接失败: {connection_error} (错误码: {rc})")
         
         def on_subscribe(client, userdata, mid, granted_qos):
             nonlocal subscribed
             subscribed = True
-            print(f"✓ 订阅成功 (消息ID: {mid}, QoS: {granted_qos})")
+            print(f"[OK] 订阅成功 (消息ID: {mid}, QoS: {granted_qos})")
         
         def on_message(client, userdata, msg):
             print(f"\n收到消息:")
@@ -110,7 +110,7 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
             nonlocal connected
             connected = False
             if rc != 0:
-                print(f"✗ 断开连接 (错误码: {rc})")
+                print(f"[ERROR] 断开连接 (错误码: {rc})")
         
         client.on_connect = on_connect
         client.on_subscribe = on_subscribe
@@ -126,11 +126,11 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
         try:
             result = client.connect(host, port, 60)
             if result != 0:
-                print(f"✗ connect()返回错误码: {result}")
+                print(f"[ERROR] connect()返回错误码: {result}")
                 client.loop_stop()
                 return False
         except Exception as e:
-            print(f"✗ 连接异常: {e}")
+            print(f"[ERROR] 连接异常: {e}")
             import traceback
             traceback.print_exc()
             client.loop_stop()
@@ -142,13 +142,13 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
         start_time = time.time()
         while not connected and (time.time() - start_time) < timeout:
             if connection_error:
-                print(f"✗ 连接失败: {connection_error}")
+                print(f"[ERROR] 连接失败: {connection_error}")
                 client.loop_stop()
                 return False
             time.sleep(0.1)
         
         if not connected:
-            print(f"✗ 连接超时（等待了{timeout}秒）")
+            print(f"[ERROR] 连接超时（等待了{timeout}秒）")
             client.loop_stop()
             return False
         
@@ -156,7 +156,7 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
         print(f"\n订阅主题: {topic}")
         result, mid = client.subscribe(topic, 0)
         if result != 0:
-            print(f"✗ 订阅失败，错误码: {result}")
+            print(f"[ERROR] 订阅失败，错误码: {result}")
             client.loop_stop()
             return False
         
@@ -168,7 +168,7 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
             time.sleep(0.1)
         
         if not subscribed:
-            print(f"⚠ 订阅确认超时，但可能已订阅成功")
+            print(f"[WARNING] 订阅确认超时，但可能已订阅成功")
         
         print("\n" + "=" * 70)
         print("连接测试成功！")
@@ -186,11 +186,11 @@ def test_websocket_connection(url, topic='zebra/print', username=None, password=
             return True
             
     except ImportError:
-        print("✗ 错误：需要安装 paho-mqtt 库")
+        print("[ERROR] 错误：需要安装 paho-mqtt 库")
         print("  运行: pip install paho-mqtt")
         return False
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print(f"[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False

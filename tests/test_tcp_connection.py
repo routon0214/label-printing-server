@@ -25,19 +25,19 @@ def test_network_connectivity(host, port, timeout=3):
         result = sock.connect_ex((host, port))
         sock.close()
         if result == 0:
-            print(f"✓ 网络连接成功")
+            print(f"[OK] 网络连接成功")
             return True
         else:
-            print(f"✗ 网络连接失败，错误码: {result}")
+            print(f"[ERROR] 网络连接失败，错误码: {result}")
             return False
     except socket.gaierror as e:
-        print(f"✗ DNS解析失败: {e}")
+        print(f"[ERROR] DNS解析失败: {e}")
         return False
     except socket.timeout:
-        print(f"✗ 连接超时")
+        print(f"[ERROR] 连接超时")
         return False
     except Exception as e:
-        print(f"✗ 网络测试异常: {e}")
+        print(f"[ERROR] 网络测试异常: {e}")
         return False
 
 
@@ -68,7 +68,7 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
         
         # 检查协议
         if protocol not in ['mqtt', 'tcp']:
-            print(f"✗ 错误：此工具仅测试TCP连接（mqtt://或tcp://）")
+            print(f"[ERROR] 错误：此工具仅测试TCP连接（mqtt://或tcp://）")
             print(f"  当前协议: {protocol}")
             return False
         
@@ -101,7 +101,7 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
             nonlocal connected, connection_error
             if rc == 0:
                 connected = True
-                print(f"✓ MQTT连接成功")
+                print(f"[OK] MQTT连接成功")
             else:
                 error_messages = {
                     1: "协议版本不正确",
@@ -111,18 +111,18 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
                     5: "未授权"
                 }
                 connection_error = error_messages.get(rc, f"未知错误码: {rc}")
-                print(f"✗ MQTT连接失败: {connection_error} (错误码: {rc})")
+                print(f"[ERROR] MQTT连接失败: {connection_error} (错误码: {rc})")
         
         def on_subscribe(client, userdata, mid, granted_qos):
             nonlocal subscribed
             subscribed = True
-            print(f"✓ 订阅成功 (消息ID: {mid}, QoS: {granted_qos})")
+            print(f"[OK] 订阅成功 (消息ID: {mid}, QoS: {granted_qos})")
         
         def on_disconnect(client, userdata, rc):
             nonlocal connected
             connected = False
             if rc != 0:
-                print(f"✗ 断开连接 (错误码: {rc})")
+                print(f"[ERROR] 断开连接 (错误码: {rc})")
         
         client = mqtt.Client()
         client.on_connect = on_connect
@@ -139,11 +139,11 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
         try:
             result = client.connect(host, port, 60)
             if result != 0:
-                print(f"✗ connect()返回错误码: {result}")
+                print(f"[ERROR] connect()返回错误码: {result}")
                 client.loop_stop()
                 return False
         except Exception as e:
-            print(f"✗ 连接异常: {e}")
+            print(f"[ERROR] 连接异常: {e}")
             import traceback
             traceback.print_exc()
             client.loop_stop()
@@ -155,13 +155,13 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
         start_time = time.time()
         while not connected and (time.time() - start_time) < timeout:
             if connection_error:
-                print(f"✗ 连接失败: {connection_error}")
+                print(f"[ERROR] 连接失败: {connection_error}")
                 client.loop_stop()
                 return False
             time.sleep(0.1)
         
         if not connected:
-            print(f"✗ 连接超时（等待了{timeout}秒）")
+            print(f"[ERROR] 连接超时（等待了{timeout}秒）")
             client.loop_stop()
             return False
         
@@ -169,7 +169,7 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
         print(f"\n订阅主题: {topic}")
         result, mid = client.subscribe(topic, 0)
         if result != 0:
-            print(f"✗ 订阅失败，错误码: {result}")
+            print(f"[ERROR] 订阅失败，错误码: {result}")
             client.loop_stop()
             return False
         
@@ -180,10 +180,10 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
             time.sleep(0.1)
         
         if not subscribed:
-            print(f"⚠ 订阅确认超时，但可能已订阅成功")
+            print(f"[WARNING] 订阅确认超时，但可能已订阅成功")
         
         print("\n" + "=" * 70)
-        print("✓ 连接测试成功！")
+        print("[OK] 连接测试成功！")
         print("=" * 70)
         print("\n按 Ctrl+C 退出...")
         
@@ -197,11 +197,11 @@ def test_mqtt_connection(url, topic='zebra/print', username=None, password=None)
             return True
             
     except ImportError:
-        print("✗ 错误：需要安装 paho-mqtt 库")
+        print("[ERROR] 错误：需要安装 paho-mqtt 库")
         print("  运行: pip install paho-mqtt")
         return False
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print(f"[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False

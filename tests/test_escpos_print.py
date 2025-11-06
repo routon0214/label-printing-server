@@ -66,9 +66,9 @@ def test_simple_receipt():
     client.disconnect()
     
     if result.rc == 0:
-        print("\n✓ 消息发送成功")
+        print("\n[OK] 消息发送成功")
     else:
-        print(f"\n✗ 消息发送失败: {result.rc}")
+        print(f"\n[ERROR] 消息发送失败: {result.rc}")
     
     print("=" * 60)
     return result.rc == 0
@@ -105,9 +105,9 @@ def test_restaurant_receipt():
     client.disconnect()
     
     if result.rc == 0:
-        print("\n✓ 消息发送成功")
+        print("\n[OK] 消息发送成功")
     else:
-        print(f"\n✗ 消息发送失败: {result.rc}")
+        print(f"\n[ERROR] 消息发送失败: {result.rc}")
     
     print("=" * 60)
     return result.rc == 0
@@ -138,9 +138,9 @@ def test_barcode_only():
     client.disconnect()
     
     if result.rc == 0:
-        print("\n✓ 消息发送成功")
+        print("\n[OK] 消息发送成功")
     else:
-        print(f"\n✗ 消息发送失败: {result.rc}")
+        print(f"\n[ERROR] 消息发送失败: {result.rc}")
     
     print("=" * 60)
     return result.rc == 0

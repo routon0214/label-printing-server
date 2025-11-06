@@ -212,9 +212,9 @@ def stop_mqtt_client():
         print("等待MQTT线程结束...")
         mqtt_thread.join(timeout=5)
         if mqtt_thread.is_alive():
-            print("⚠ MQTT线程未能在5秒内停止")
+            print("[WARNING] MQTT线程未能在5秒内停止")
         else:
-            print("✓ MQTT线程已结束")
+            print("[OK] MQTT线程已结束")
     
     mqtt_client = None
     mqtt_thread = None
@@ -232,7 +232,7 @@ def start_mqtt_client():
     if mqtt_client or mqtt_thread:
         print("检测到旧的MQTT客户端，正在停止...")
         stop_mqtt_client()
-        print("✓ 旧客户端已停止")
+        print("[OK] 旧客户端已停止")
     
     try:
         # 确保config_manager已初始化
@@ -240,14 +240,14 @@ def start_mqtt_client():
         if config_manager is None:
             print("  初始化配置管理器...")
             config_manager = ConfigManager('config/printer_config.json')
-            print("  ✓ 配置管理器已初始化")
+            print("  [OK] 配置管理器已初始化")
         else:
-            print("  ✓ 配置管理器已存在")
+            print("  [OK] 配置管理器已存在")
         
         # 加载配置
         print("  加载配置...")
         config = config_manager.load()
-        print(f"  ✓ 配置已加载")
+        print(f"  [OK] 配置已加载")
         
         print("\n[步骤2] 解析MQTT配置...")
         mqtt_config = config_manager.get_mqtt_config()
@@ -263,7 +263,7 @@ def start_mqtt_client():
         
         printers_config = config.get('printers', [])
         printer_config = config.get('printer')
-        print(f"  ✓ 找到 {len(printers_config)} 个打印机配置")
+        print(f"  [OK] 找到 {len(printers_config)} 个打印机配置")
         
         # 创建MQTT客户端
         print("\n[步骤3] 创建MQTT客户端实例...")
@@ -279,23 +279,23 @@ def start_mqtt_client():
             printer_config=printer_config,
             printers_config=printers_config
         )
-        print("  ✓ MQTT客户端实例已创建")
+        print("  [OK] MQTT客户端实例已创建")
         
         # 在后台线程中启动
         print("\n[步骤4] 启动后台线程...")
         mqtt_thread = threading.Thread(target=mqtt_client.start, daemon=True, name="MQTT-Client-Thread")
         mqtt_thread.start()
-        print(f"  ✓ 后台线程已启动 (线程ID: {mqtt_thread.ident})")
-        print(f"  ✓ 线程状态: {'运行中' if mqtt_thread.is_alive() else '已停止'}")
+        print(f"  [OK] 后台线程已启动 (线程ID: {mqtt_thread.ident})")
+        print(f"  [OK] 线程状态: {'运行中' if mqtt_thread.is_alive() else '已停止'}")
         
         print("\n" + "="*70)
-        print("✓ MQTT客户端已在后台启动")
+        print("[OK] MQTT客户端已在后台启动")
         print("="*70)
         return True
         
     except Exception as e:
         print("\n" + "="*70)
-        print(f"✗ MQTT客户端启动失败")
+        print(f"[ERROR] MQTT客户端启动失败")
         print("="*70)
         print(f"错误信息: {e}")
         import traceback

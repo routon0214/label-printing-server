@@ -88,7 +88,7 @@ def test_mqtt_connection():
             nonlocal connected, connection_error
             if rc == 0:
                 connected = True
-                print("✓ 连接成功！")
+                print("[OK] 连接成功！")
             else:
                 error_messages = {
                     1: "协议版本不正确",
@@ -98,13 +98,13 @@ def test_mqtt_connection():
                     5: "未授权"
                 }
                 connection_error = error_messages.get(rc, f"未知错误码: {rc}")
-                print(f"✗ 连接失败: {connection_error} (错误码: {rc})")
+                print(f"[ERROR] 连接失败: {connection_error} (错误码: {rc})")
         
         def on_disconnect(client, userdata, rc):
             nonlocal connected
             connected = False
             if rc != 0:
-                print(f"✗ 意外断开连接 (错误码: {rc})")
+                print(f"[ERROR] 意外断开连接 (错误码: {rc})")
         
         client.on_connect = on_connect
         client.on_disconnect = on_disconnect
@@ -119,7 +119,7 @@ def test_mqtt_connection():
             
             result = client.connect(host, port, 60)
             if result != 0:
-                print(f"✗ 连接调用失败，返回码: {result}")
+                print(f"[ERROR] 连接调用失败，返回码: {result}")
                 client.loop_stop()
                 return False
             
@@ -128,7 +128,7 @@ def test_mqtt_connection():
             start_time = time.time()
             while not connected and (time.time() - start_time) < timeout:
                 if connection_error:
-                    print(f"✗ 连接失败: {connection_error}")
+                    print(f"[ERROR] 连接失败: {connection_error}")
                     client.loop_stop()
                     return False
                 time.sleep(0.1)
@@ -150,7 +150,7 @@ def test_mqtt_connection():
                 print(f"测试订阅主题: {topic}")
                 client.subscribe(topic)
                 time.sleep(0.5)
-                print("✓ 订阅成功")
+                print("[OK] 订阅成功")
                 print()
                 
                 client.loop_stop()
@@ -178,18 +178,18 @@ def test_mqtt_connection():
                 return False
                 
         except Exception as e:
-            print(f"✗ 连接异常: {e}")
+            print(f"[ERROR] 连接异常: {e}")
             import traceback
             traceback.print_exc()
             client.loop_stop()
             return False
             
     except ImportError:
-        print("✗ 错误：需要安装 paho-mqtt 库")
+        print("[ERROR] 错误：需要安装 paho-mqtt 库")
         print("  运行: pip install paho-mqtt")
         return False
     except Exception as e:
-        print(f"✗ 测试失败: {e}")
+        print(f"[ERROR] 测试失败: {e}")
         import traceback
         traceback.print_exc()
         return False
