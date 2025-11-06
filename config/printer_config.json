@@ -17,7 +17,7 @@
   },
   "printers": [
     {
-      "name": "ZT411",
+      "name": "ZD888",
       "types": [
         "label"
       ],
@@ -25,7 +25,7 @@
       "port": 9100,
       "device": null,
       "default": false,
-      "_comment": "斑马标签打印机 - 处理ZPL标签"
+      "_comment": "斑马标签打印机 ZD888-203dpi - 处理ZPL标签"
     },
     {
       "name": "KONICA MINOLTA Universal PCL",
