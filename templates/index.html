@@ -69,7 +69,7 @@
                         <div class="form-group">
                             <label for="json-input">JSON数据:</label>
                             <textarea id="json-input" name="json_data" rows="10" 
-                                      placeholder='{"print_type": "label", "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"}'></textarea>
+                                      placeholder='{"print_type": "label", "zpl_code": "SIZE 60 mm, 40 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"测试\"\nPRINT 1\n"}'></textarea>
                             <small>支持标签、PDF、小票打印的JSON格式数据</small>
                         </div>
 
@@ -87,7 +87,16 @@
                     <h2>📋 示例数据</h2>
                     <div class="examples">
                         <div class="example-item">
-                            <h3>ZPL标签示例</h3>
+                            <h3>TSPL标签示例（TSC打印机）</h3>
+                            <pre><code>{
+  "print_type": "label",
+  "zpl_code": "SIZE 60 mm, 40 mm\nGAP 1 mm, 0 mm\nDIRECTION 1,0\nREFERENCE 0,0\nOFFSET 0 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('tspl')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>ZPL标签示例（Zebra打印机）</h3>
                             <pre><code>{
   "print_type": "label",
   "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"
@@ -96,10 +105,10 @@
                         </div>
 
                         <div class="example-item">
-                            <h3>ESC/POS小票示例</h3>
+                            <h3>ESC/POS小票示例（热敏打印机）</h3>
                             <pre><code>{
   "print_type": "escpos",
-  "raw_text": "SIZE 60 mm, 40 mm\n GAP 1 mm, 0 mm\n DIRECTION 1,0\n REFERENCE 0,0\n OFFSET 0 mm\n CLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n"
+  "raw_text": "测试打印\n商品A    10.00\n商品B    20.00\n总计:    30.00\n谢谢惠顾!\n\n\n"
 }</code></pre>
                             <button class="btn btn-small" onclick="loadExample('escpos')">加载示例</button>
                         </div>
@@ -888,13 +897,17 @@
         // 加载示例
         function loadExample(type) {
             const examples = {
+                tspl: {
+                    "print_type": "label",
+                    "zpl_code": "SIZE 60 mm, 40 mm\nGAP 1 mm, 0 mm\nDIRECTION 1,0\nREFERENCE 0,0\nOFFSET 0 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n"
+                },
                 zpl: {
                     "print_type": "label",
                     "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"
                 },
                 escpos: {
                     "print_type": "escpos",
-                    "raw_text": "SIZE 60 mm, 40 mm\n GAP 1 mm, 0 mm\n DIRECTION 1,0\n REFERENCE 0,0\n OFFSET 0 mm\n CLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n"
+                    "raw_text": "测试打印\n商品A    10.00\n商品B    20.00\n总计:    30.00\n谢谢惠顾!\n\n\n"
                 },
                 receipt: {
                     "print_type": "escpos",
