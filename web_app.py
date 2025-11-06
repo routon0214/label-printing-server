@@ -44,6 +44,7 @@ from src.core.printer import ZebraPrinter
 from src.core.pdf_printer import PDFPrinter
 from src.core.escpos_printer import ESCPOSPrinter
 from src.core.zpl_generator import ZPLGenerator
+from src.utils.zpl_chinese_converter import detect_and_convert_zpl
 
 # 创建FastAPI应用
 app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
@@ -508,6 +509,11 @@ async def print_file(
                     content={"success": False, "error": "未配置标签打印机"}
                 )
             
+            # 自动检测并转换ZPL中的中文
+            zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+            if was_converted:
+                print("  [OK] ZPL中文已自动转换为图像")
+            
             success = printer.print_label(zpl_code)
             if not success:
                 error_msg = '标签打印失败'
@@ -625,8 +631,12 @@ async def print_raw(
             # ZPL标签打印
             if 'zpl_code' in data:
                 zpl_code = data['zpl_code']
+                # 自动检测并转换ZPL中的中文
+                zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+                if was_converted:
+                    print("  [OK] JSON中的ZPL代码，中文已自动转换为图像")
             else:
-                # 自动生成ZPL
+                # 自动生成ZPL（已包含中文转图像）
                 zpl_code = zpl_generator.generate_label_zpl(data)
             success = printer.print_label(zpl_code)
         
