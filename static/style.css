@@ -38,10 +38,11 @@ header h1 {
     background: white;
     border-radius: 10px;
     padding: 15px 20px;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
     display: flex;
-    gap: 30px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    gap: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    flex-wrap: wrap;
 }
 
 .status-item {
@@ -85,7 +86,7 @@ header h1 {
     background: white;
     padding: 10px;
     border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .main-tab-btn {
@@ -125,20 +126,19 @@ main {
     margin-bottom: 30px;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 30px;
+    gap: 20px;
 }
 
 .card {
     background: white;
     border-radius: 15px;
     padding: 30px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: box-shadow 0.3s ease;
 }
 
 .card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
 .card h2 {
@@ -219,8 +219,8 @@ main {
 }
 
 .btn-primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    background: linear-gradient(135deg, #5568d3 0%, #6a3c8f 100%);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .btn-primary:disabled {
@@ -271,17 +271,15 @@ main {
     padding: 20px;
     border-radius: 8px;
     border-left: 4px solid #667eea;
-    animation: slideIn 0.3s ease;
+    animation: fadeInOnly 0.2s ease;
 }
 
-@keyframes slideIn {
+@keyframes fadeInOnly {
     from {
         opacity: 0;
-        transform: translateY(-10px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -321,21 +319,27 @@ footer {
 
 /* 响应式设计 */
 @media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
     main {
         grid-template-columns: 1fr;
+        gap: 15px;
     }
     
     header h1 {
-        font-size: 2em;
+        font-size: 1.8em;
     }
     
     .status-bar {
         flex-direction: column;
-        gap: 15px;
+        gap: 10px;
     }
     
     .main-tabs {
         flex-direction: column;
+        gap: 5px;
     }
     
     .main-tab-btn {
@@ -348,6 +352,16 @@ footer {
     
     .printers-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .card {
+        padding: 20px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        padding: 20px;
+        margin: 10px auto;
     }
 }
 
@@ -509,9 +523,10 @@ footer {
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
-    background-color: rgba(0, 0, 0, 0.5);
-    animation: fadeIn 0.3s;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.6);
+    animation: fadeIn 0.2s;
+    padding: 20px 0;
 }
 
 @keyframes fadeIn {
@@ -521,19 +536,21 @@ footer {
 
 .modal-content {
     background-color: white;
-    margin: 5% auto;
+    margin: 20px auto;
     padding: 30px;
     border-radius: 15px;
     width: 90%;
     max-width: 600px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    animation: slideDown 0.3s;
+    animation: slideDown 0.2s;
     position: relative;
 }
 
 @keyframes slideDown {
     from {
-        transform: translateY(-50px);
+        transform: translateY(-20px);
         opacity: 0;
     }
     to {
@@ -550,20 +567,28 @@ footer {
 }
 
 .close {
-    color: #aaa;
+    color: #999;
     float: right;
-    font-size: 28px;
+    font-size: 32px;
     font-weight: bold;
     position: absolute;
-    right: 20px;
-    top: 20px;
+    right: 15px;
+    top: 15px;
     cursor: pointer;
     line-height: 1;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
 }
 
 .close:hover,
 .close:focus {
-    color: #667eea;
+    color: white;
+    background: #667eea;
     text-decoration: none;
 }
 
