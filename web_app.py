@@ -47,6 +47,7 @@ from src.core.escpos_printer import ESCPOSPrinter
 from src.core.zpl_generator import ZPLGenerator
 from src.utils.zpl_chinese_converter import detect_and_convert_zpl
 from src.utils.log_manager import LogManager
+from src.utils.print_queue import get_print_queue
 
 # 创建FastAPI应用
 app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
@@ -54,11 +55,14 @@ app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT
 # 日志管理器
 log_manager = LogManager(log_dir='data/logs', retention_days=7)
 
+# 打印队列
+print_queue = None
+
 # FastAPI启动事件 - 自动启动MQTT客户端
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
-    global config_manager
+    global config_manager, print_queue
     
     # 确保目录存在
     ensure_directories()
@@ -72,6 +76,13 @@ async def startup_event():
     # 初始化配置管理器（如果还未初始化）
     if config_manager is None:
         config_manager = ConfigManager(config_file)
+    
+    # 初始化打印队列
+    print("\n" + "="*70)
+    print("初始化打印队列...")
+    print("="*70)
+    print_queue = get_print_queue()
+    print("打印队列已启动")
     
     # 清理过期日志
     print("\n" + "="*70)
@@ -94,9 +105,19 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
+    global print_queue
+    
     print("\n" + "="*70)
-    print("应用关闭事件 - 停止MQTT客户端")
+    print("应用关闭事件")
     print("="*70)
+    
+    # 停止打印队列
+    if print_queue:
+        print("停止打印队列...")
+        print_queue.stop()
+    
+    # 停止MQTT客户端
+    print("停止MQTT客户端...")
     stop_mqtt_client()
 
 # 静态文件和模板
@@ -136,6 +157,7 @@ def ensure_directories():
         'data/logs',
         'data/failed_labels',
         'data/uploads',
+        'data/print_queue',
         'templates',
         'static'
     ]
@@ -690,7 +712,9 @@ async def print_raw(
     request: Request,
     username: str = Depends(verify_credentials)
 ):
-    """处理原始数据打印请求（JSON格式）"""
+    """处理原始数据打印请求（JSON格式）- 使用队列"""
+    global print_queue
+    
     try:
         data = await request.json()
         if not data:
@@ -703,7 +727,6 @@ async def print_raw(
         normalized_data = normalize_print_data(data)
         print_type = normalized_data.get('print_type', 'label').lower()
         data_format = normalized_data.get('format', 'structured')
-        content = normalized_data.get('content')
         
         print(f"\n[打印请求]")
         print(f"  类型: {print_type}")
@@ -717,89 +740,20 @@ async def print_raw(
                 content={"success": False, "error": f'未配置{print_type}打印机'}
             )
         
-        success = False
+        # 添加到打印队列
+        if print_queue is None:
+            print_queue = get_print_queue()
         
-        if print_type == 'label':
-            # ZPL标签打印
-            if data_format == 'zpl':
-                # 直接ZPL代码
-                zpl_code = content
-                print(f"  [DEBUG] 原始ZPL长度: {len(zpl_code)} 字符")
-                # 自动检测并转换ZPL中的中文
-                zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
-                if was_converted:
-                    print("  [OK] ZPL代码中文已自动转换为图像")
-            
-            elif data_format == 'structured':
-                # 结构化数据，生成ZPL
-                print("  [INFO] 从结构化数据生成ZPL...")
-                zpl_code = zpl_generator.generate_label_zpl(content)
-            
-            else:
-                return JSONResponse(
-                    status_code=400,
-                    content={"success": False, "error": f'不支持的标签格式: {data_format}'}
-                )
-            
-            # 调试：保存实际发送的ZPL代码
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            debug_file = f"data/debug_web_json_{timestamp}.zpl"
-            try:
-                with open(debug_file, 'w', encoding='utf-8') as f:
-                    f.write(zpl_code)
-                print(f"  [DEBUG] ZPL已保存到: {debug_file}")
-                print(f"  [DEBUG] ZPL长度: {len(zpl_code)} 字符")
-            except Exception as debug_error:
-                print(f"  [WARNING] 无法保存调试文件: {debug_error}")
-            
-            success = printer.print_label(zpl_code)
+        task_id = print_queue.add_task(normalized_data, printer)
         
-        elif print_type == 'pdf':
-            # PDF打印
-            pdf_data = data.get('pdf_data') or data.get('pdf_file')
-            if not pdf_data:
-                return JSONResponse(
-                    status_code=400,
-                    content={"success": False, "error": "缺少PDF数据"}
-                )
-            printer_name = data.get('printer')
-            success = printer.print_pdf(pdf_data, printer_name)
+        print(f"  [OK] 任务已加入队列: {task_id}")
         
-        elif print_type in ['receipt', 'escpos']:
-            # ESC/POS小票打印
-            if data_format == 'raw':
-                # 原始文本格式
-                receipt_data = {
-                    'raw_text': content,
-                    'encoding': normalized_data.get('encoding', 'gb2312')
-                }
-            elif data_format == 'structured':
-                # 结构化格式
-                receipt_data = content
-            else:
-                return JSONResponse(
-                    status_code=400,
-                    content={"success": False, "error": f'不支持的小票格式: {data_format}'}
-                )
-            
-            success = printer.print_receipt(receipt_data)
-        
-        else:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "error": f'不支持的打印类型: {print_type}'}
-            )
-        
-        if success:
-            return JSONResponse({
-                "success": True,
-                "message": f'{print_type.upper()}打印任务已发送'
-            })
-        else:
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "error": "打印失败"}
-            )
+        return JSONResponse({
+            "success": True,
+            "message": f'{print_type.upper()}打印任务已加入队列',
+            "task_id": task_id,
+            "queue_size": print_queue.get_status()['queue_size']
+        })
     
     except Exception as e:
         import traceback
@@ -813,7 +767,7 @@ async def print_raw(
 @app.get("/api/status")
 async def get_status(username: str = Depends(verify_credentials)):
     """获取服务状态"""
-    global config_manager, mqtt_client, mqtt_thread
+    global config_manager, mqtt_client, mqtt_thread, print_queue
     if config_manager is None:
         config_manager = ConfigManager('config/printer_config.json')
     config = config_manager.load()
@@ -882,13 +836,45 @@ async def get_status(username: str = Depends(verify_credentials)):
     if mqtt_error:
         mqtt_info["error"] = mqtt_error
     
+    # 获取打印队列状态
+    queue_status = {}
+    if print_queue:
+        queue_status = print_queue.get_status()
+    
     return JSONResponse({
         "mqtt": mqtt_info,
         "printers": {
             "count": len(printers_config),
             "configs": printers_config
-        }
+        },
+        "queue": queue_status
     })
+
+
+@app.get("/api/queue/status")
+async def get_queue_status(username: str = Depends(verify_credentials)):
+    """获取打印队列状态"""
+    global print_queue
+    try:
+        if print_queue is None:
+            return JSONResponse({
+                "success": False,
+                "error": "打印队列未初始化"
+            })
+        
+        status = print_queue.get_status()
+        return JSONResponse({
+            "success": True,
+            "status": status
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取队列状态失败: {str(e)}'}
+        )
 
 
 @app.get("/api/config")

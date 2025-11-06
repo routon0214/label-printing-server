@@ -22,6 +22,14 @@
                 <span class="status-label">打印机数量:</span>
                 <span id="printer-count" class="status-value">-</span>
             </div>
+            <div class="status-item">
+                <span class="status-label">打印队列:</span>
+                <span id="queue-status" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">已处理/失败:</span>
+                <span id="queue-stats" class="status-value">-</span>
+            </div>
         </div>
 
         <!-- 主Tab导航 -->
@@ -413,6 +421,7 @@
                 const response = await fetch('/api/status');
                 const data = await response.json();
                 
+                // MQTT状态
                 let statusText = '✗ 已停止';
                 let statusClass = 'status-error';
                 if (data.mqtt.status === 'running') {
@@ -424,7 +433,42 @@
                 }
                 document.getElementById('mqtt-status').textContent = statusText;
                 document.getElementById('mqtt-status').className = 'status-value ' + statusClass;
+                
+                // 打印机数量
                 document.getElementById('printer-count').textContent = data.printers.count;
+                
+                // 打印队列状态
+                if (data.queue) {
+                    const queueSize = data.queue.queue_size || 0;
+                    const isRunning = data.queue.is_running;
+                    
+                    let queueText = '';
+                    let queueClass = 'status-value';
+                    
+                    if (!isRunning) {
+                        queueText = '✗ 未运行';
+                        queueClass = 'status-value status-error';
+                    } else if (queueSize > 0) {
+                        queueText = `⏳ ${queueSize}个任务`;
+                        queueClass = 'status-value status-warning';
+                    } else {
+                        queueText = '✓ 空闲';
+                        queueClass = 'status-value status-success';
+                    }
+                    
+                    document.getElementById('queue-status').textContent = queueText;
+                    document.getElementById('queue-status').className = queueClass;
+                    
+                    // 统计信息
+                    const processed = data.queue.processed_count || 0;
+                    const failed = data.queue.failed_count || 0;
+                    const successRate = data.queue.success_rate || 100;
+                    
+                    document.getElementById('queue-stats').textContent = `${processed}/${failed} (${successRate}%)`;
+                } else {
+                    document.getElementById('queue-status').textContent = '-';
+                    document.getElementById('queue-stats').textContent = '-';
+                }
             } catch (error) {
                 document.getElementById('mqtt-status').textContent = '✗ 检查失败';
                 document.getElementById('mqtt-status').className = 'status-value status-error';

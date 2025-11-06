@@ -72,6 +72,11 @@ header h1 {
     color: #721c24;
 }
 
+.status-warning {
+    background: #fff3cd;
+    color: #856404;
+}
+
 /* 主Tab导航 */
 .main-tabs {
     display: flex;
