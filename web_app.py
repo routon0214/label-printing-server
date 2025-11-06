@@ -13,6 +13,7 @@ import threading
 import base64
 import tempfile
 import json
+import datetime
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -45,9 +46,13 @@ from src.core.pdf_printer import PDFPrinter
 from src.core.escpos_printer import ESCPOSPrinter
 from src.core.zpl_generator import ZPLGenerator
 from src.utils.zpl_chinese_converter import detect_and_convert_zpl
+from src.utils.log_manager import LogManager
 
 # 创建FastAPI应用
 app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
+
+# 日志管理器
+log_manager = LogManager(log_dir='data/logs', retention_days=7)
 
 # FastAPI启动事件 - 自动启动MQTT客户端
 @app.on_event("startup")
@@ -68,11 +73,22 @@ async def startup_event():
     if config_manager is None:
         config_manager = ConfigManager(config_file)
     
+    # 清理过期日志
+    print("\n" + "="*70)
+    print("清理过期日志...")
+    print("="*70)
+    deleted_count = log_manager.clean_old_logs()
+    print(f"已清理 {deleted_count} 个过期日志文件")
+    
     # 启动MQTT客户端
     print("\n" + "="*70)
     print("应用启动事件 - 自动启动MQTT客户端")
     print("="*70)
     start_mqtt_client()
+    
+    # 启动日志清理定时任务
+    import asyncio
+    asyncio.create_task(scheduled_log_cleanup())
 
 # FastAPI关闭事件 - 停止MQTT客户端
 @app.on_event("shutdown")
@@ -1047,6 +1063,137 @@ async def scan_printers(username: str = Depends(verify_credentials)):
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": f'扫描打印机失败: {str(e)}', "printers": []}
+        )
+
+
+async def scheduled_log_cleanup():
+    """定时清理日志任务（每天凌晨3点执行）"""
+    import asyncio
+    while True:
+        try:
+            # 计算距离下次凌晨3点的时间
+            now = datetime.datetime.now()
+            tomorrow_3am = now.replace(hour=3, minute=0, second=0, microsecond=0)
+            if now.hour >= 3:
+                tomorrow_3am += datetime.timedelta(days=1)
+            
+            sleep_seconds = (tomorrow_3am - now).total_seconds()
+            
+            print(f"日志清理任务：下次执行时间 {tomorrow_3am.strftime('%Y-%m-%d %H:%M:%S')}")
+            await asyncio.sleep(sleep_seconds)
+            
+            # 执行清理
+            print("\n" + "="*70)
+            print("执行定时日志清理任务...")
+            print("="*70)
+            deleted_count = log_manager.clean_old_logs()
+            print(f"已清理 {deleted_count} 个过期日志文件")
+            print("="*70)
+        
+        except Exception as e:
+            print(f"日志清理任务出错: {e}")
+            # 出错后等待1小时再试
+            await asyncio.sleep(3600)
+
+
+@app.get("/api/logs")
+async def get_logs(
+    filename: Optional[str] = None,
+    lines: int = 100,
+    level: Optional[str] = None,
+    search: Optional[str] = None,
+    username: str = Depends(verify_credentials)
+):
+    """
+    获取日志内容
+    
+    Args:
+        filename: 日志文件名（可选）
+        lines: 返回的日志行数（默认100）
+        level: 过滤日志级别（ERROR, WARNING, INFO等）
+        search: 搜索关键词
+    """
+    try:
+        logs = log_manager.read_logs(
+            filename=filename,
+            lines=lines,
+            level=level,
+            search=search
+        )
+        
+        return JSONResponse({
+            "success": True,
+            "logs": logs,
+            "count": len(logs)
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取日志失败: {str(e)}'}
+        )
+
+
+@app.get("/api/logs/files")
+async def get_log_files(username: str = Depends(verify_credentials)):
+    """获取日志文件列表"""
+    try:
+        stats = log_manager.get_log_stats()
+        return JSONResponse({
+            "success": True,
+            "stats": stats
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取日志文件列表失败: {str(e)}'}
+        )
+
+
+@app.get("/api/logs/stats")
+async def get_log_stats(
+    filename: Optional[str] = None,
+    username: str = Depends(verify_credentials)
+):
+    """获取日志统计信息"""
+    try:
+        level_counts = log_manager.get_log_levels_count(filename=filename)
+        return JSONResponse({
+            "success": True,
+            "level_counts": level_counts
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取日志统计失败: {str(e)}'}
+        )
+
+
+@app.post("/api/logs/clean")
+async def clean_old_logs(username: str = Depends(verify_credentials)):
+    """手动清理过期日志"""
+    try:
+        deleted_count = log_manager.clean_old_logs()
+        return JSONResponse({
+            "success": True,
+            "message": f"已清理 {deleted_count} 个过期日志文件",
+            "deleted_count": deleted_count
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'清理日志失败: {str(e)}'}
         )
 
 

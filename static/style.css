@@ -579,3 +579,274 @@ footer {
     padding: 8px;
 }
 
+/* 日志模块样式 */
+.log-controls {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.log-control-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    align-items: flex-end;
+}
+
+.log-control-row:last-child {
+    margin-bottom: 0;
+}
+
+.log-stats {
+    display: flex;
+    gap: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: white;
+    border-radius: 6px;
+    border-left: 4px solid #667eea;
+}
+
+.stat-item.stat-error {
+    border-left-color: #dc3545;
+}
+
+.stat-item.stat-warning {
+    border-left-color: #ffc107;
+}
+
+.stat-item.stat-info {
+    border-left-color: #17a2b8;
+}
+
+.stat-label {
+    font-weight: 600;
+    color: #666;
+}
+
+.stat-value {
+    font-weight: 700;
+    font-size: 1.2em;
+    color: #333;
+}
+
+.log-viewer {
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 20px;
+    border-radius: 8px;
+    max-height: 600px;
+    overflow-y: auto;
+    font-family: 'Courier New', 'Monaco', monospace;
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+
+.log-viewer::-webkit-scrollbar {
+    width: 10px;
+}
+
+.log-viewer::-webkit-scrollbar-track {
+    background: #1e1e1e;
+    border-radius: 5px;
+}
+
+.log-viewer::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 5px;
+}
+
+.log-viewer::-webkit-scrollbar-thumb:hover {
+    background: #5568d3;
+}
+
+.log-loading,
+.log-empty,
+.log-error {
+    text-align: center;
+    padding: 20px;
+    color: #aaa;
+}
+
+.log-error {
+    color: #dc3545;
+}
+
+.log-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.log-entry {
+    display: flex;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.log-entry:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.log-entry.log-level-error {
+    border-left-color: #dc3545;
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.log-entry.log-level-warning {
+    border-left-color: #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.log-entry.log-level-info {
+    border-left-color: #17a2b8;
+    background: rgba(23, 162, 184, 0.1);
+}
+
+.log-entry.log-level-debug {
+    border-left-color: #6c757d;
+    background: rgba(108, 117, 125, 0.1);
+}
+
+.log-timestamp {
+    color: #888;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 160px;
+}
+
+.log-level {
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.log-entry.log-level-error .log-level {
+    color: #dc3545;
+}
+
+.log-entry.log-level-warning .log-level {
+    color: #ffc107;
+}
+
+.log-entry.log-level-info .log-level {
+    color: #17a2b8;
+}
+
+.log-entry.log-level-debug .log-level {
+    color: #6c757d;
+}
+
+.log-logger {
+    color: #667eea;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 120px;
+}
+
+.log-message {
+    color: #f8f8f2;
+    flex: 1;
+    word-break: break-word;
+}
+
+.log-file-stats {
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.log-file-stats p {
+    margin: 8px 0;
+    color: #666;
+}
+
+.log-files-list {
+    margin-top: 20px;
+}
+
+.log-files-list h3 {
+    color: #667eea;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+}
+
+.log-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    border-left: 3px solid #667eea;
+    gap: 15px;
+}
+
+.log-file-item:hover {
+    background: #e9ecef;
+}
+
+.file-name {
+    flex: 1;
+    font-weight: 600;
+    color: #333;
+}
+
+.file-size {
+    color: #666;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+
+.file-modified {
+    color: #888;
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+
+/* 响应式设计 - 日志模块 */
+@media (max-width: 768px) {
+    .log-control-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .log-stats {
+        flex-direction: column;
+    }
+    
+    .log-entry {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .log-timestamp,
+    .log-level,
+    .log-logger {
+        min-width: auto;
+    }
+    
+    .log-file-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+

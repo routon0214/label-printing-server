@@ -29,6 +29,7 @@
             <button class="main-tab-btn active" onclick="switchMainTab('print')">📤 打印测试</button>
             <button class="main-tab-btn" onclick="switchMainTab('config')">⚙️ 配置管理</button>
             <button class="main-tab-btn" onclick="switchMainTab('status')">📊 状态监控</button>
+            <button class="main-tab-btn" onclick="switchMainTab('logs')">📋 日志查看</button>
         </div>
 
         <main>
@@ -69,7 +70,7 @@
                         <div class="form-group">
                             <label for="json-input">JSON数据:</label>
                             <textarea id="json-input" name="json_data" rows="10" 
-                                      placeholder='{"print_type": "label", "zpl_code": "SIZE 60 mm, 40 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"测试\"\nPRINT 1\n"}'></textarea>
+                                      placeholder='{"print_type": "label", "title": "测试", "fields": [{"label": "产品", "value": "元件A", "font_size": 20}]}'></textarea>
                             <small>支持标签、PDF、小票打印的JSON格式数据</small>
                         </div>
 
@@ -87,45 +88,72 @@
                     <h2>📋 示例数据</h2>
                     <div class="examples">
                         <div class="example-item">
-                            <h3>TSPL标签示例（TSC打印机）</h3>
+                            <h3>1. 简单中文标签（推荐测试）</h3>
                             <pre><code>{
   "print_type": "label",
-  "zpl_code": "SIZE 60 mm, 40 mm\nGAP 1 mm, 0 mm\nDIRECTION 1,0\nREFERENCE 0,0\nOFFSET 0 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n"
+  "title": "测试",
+  "fields": [
+    {"label": "产品", "value": "元件A", "font_size": 20}
+  ]
 }</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('tspl')">加载示例</button>
+                            <button class="btn btn-small" onclick="loadExample('simple_chinese')">加载示例</button>
                         </div>
 
                         <div class="example-item">
-                            <h3>ZPL标签示例（Zebra打印机）</h3>
+                            <h3>2. 中英文混合标签</h3>
                             <pre><code>{
   "print_type": "label",
-  "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('zpl')">加载示例</button>
-                        </div>
-
-                        <div class="example-item">
-                            <h3>ESC/POS小票示例（热敏打印机）</h3>
-                            <pre><code>{
-  "print_type": "escpos",
-  "raw_text": "测试打印\n商品A    10.00\n商品B    20.00\n总计:    30.00\n谢谢惠顾!\n\n\n"
-}</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('escpos')">加载示例</button>
-                        </div>
-
-                        <div class="example-item">
-                            <h3>结构化小票示例</h3>
-                            <pre><code>{
-  "print_type": "escpos",
-  "title": "销售收据",
-  "items": [
-    {"name": "商品A", "qty": 2, "price": 10.00},
-    {"name": "商品B", "qty": 1, "price": 20.00}
+  "title": "Product 产品",
+  "fields": [
+    {"label": "Name", "value": "Component-A", "font_size": 22},
+    {"label": "名称", "value": "电子元件", "font_size": 22}
   ],
-  "total": 40.00,
-  "footer": "感谢惠顾"
+  "barcode": "TEST001"
 }</code></pre>
-                            <button class="btn btn-small" onclick="loadExample('receipt')">加载示例</button>
+                            <button class="btn btn-small" onclick="loadExample('mixed')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>3. 直接ZPL代码（含中文）</h3>
+                            <pre><code>{
+  "print_type": "label",
+  "zpl_code": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello^FS^XZ"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('zpl_chinese')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>4. 纯英文ZPL</h3>
+                            <pre><code>{
+  "print_type": "label",
+  "zpl_code": "^XA^FO50,50^A0N,40,40^FDEnglish Test^FS^FO50,120^BCN,80,Y,N,N^FD123456^FS^XZ"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('zpl_english')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>5. 得力小票（中文）</h3>
+                            <pre><code>{
+  "print_type": "escpos",
+  "title": "销售小票",
+  "items": [
+    {"name": "商品A", "qty": 2, "price": 15.50},
+    {"name": "商品B", "qty": 1, "price": 30.00}
+  ],
+  "total": 61.00,
+  "footer": "谢谢惠顾!"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('deli_receipt')">加载示例</button>
+                        </div>
+
+                        <div class="example-item">
+                            <h3>6. 得力原始文本</h3>
+                            <pre><code>{
+  "print_type": "escpos",
+  "raw_text": "测试打印\n商品A  15.00\n商品B  30.00\n总计:  45.00\n谢谢!\n\n\n",
+  "encoding": "gb2312"
+}</code></pre>
+                            <button class="btn btn-small" onclick="loadExample('deli_raw')">加载示例</button>
                         </div>
                     </div>
                 </div>
@@ -275,6 +303,92 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 日志查看Tab -->
+            <div id="logs-tab" class="main-tab-content">
+                <div class="card">
+                    <h2>📋 日志查看</h2>
+                    
+                    <!-- 日志控制面板 -->
+                    <div class="log-controls">
+                        <div class="log-control-row">
+                            <div class="form-group" style="flex: 1;">
+                                <label for="log-file-select">日志文件:</label>
+                                <select id="log-file-select" onchange="onLogFileChange()">
+                                    <option value="">最新日志</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group" style="flex: 1;">
+                                <label for="log-level-filter">日志级别:</label>
+                                <select id="log-level-filter" onchange="loadLogs()">
+                                    <option value="">全部</option>
+                                    <option value="ERROR">ERROR</option>
+                                    <option value="WARNING">WARNING</option>
+                                    <option value="INFO">INFO</option>
+                                    <option value="DEBUG">DEBUG</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group" style="flex: 1;">
+                                <label for="log-lines">显示行数:</label>
+                                <select id="log-lines" onchange="loadLogs()">
+                                    <option value="50">50行</option>
+                                    <option value="100" selected>100行</option>
+                                    <option value="200">200行</option>
+                                    <option value="500">500行</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="log-control-row">
+                            <div class="form-group" style="flex: 1;">
+                                <label for="log-search">搜索关键词:</label>
+                                <input type="text" id="log-search" placeholder="输入关键词搜索..." onkeyup="onLogSearchKeyup(event)">
+                            </div>
+                            
+                            <div class="form-group" style="display: flex; gap: 10px; align-items: flex-end;">
+                                <button class="btn btn-primary" onclick="loadLogs()">🔍 搜索</button>
+                                <button class="btn btn-secondary" onclick="refreshLogs()">🔄 刷新</button>
+                                <button class="btn btn-secondary" onclick="cleanOldLogs()">🗑️ 清理过期日志</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 日志统计 -->
+                    <div class="log-stats" id="log-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">总记录:</span>
+                            <span class="stat-value" id="log-count">-</span>
+                        </div>
+                        <div class="stat-item stat-error">
+                            <span class="stat-label">错误:</span>
+                            <span class="stat-value" id="log-error-count">-</span>
+                        </div>
+                        <div class="stat-item stat-warning">
+                            <span class="stat-label">警告:</span>
+                            <span class="stat-value" id="log-warning-count">-</span>
+                        </div>
+                        <div class="stat-item stat-info">
+                            <span class="stat-label">信息:</span>
+                            <span class="stat-value" id="log-info-count">-</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 日志内容 -->
+                    <div class="log-viewer" id="log-viewer">
+                        <p class="log-loading">加载中...</p>
+                    </div>
+                </div>
+                
+                <!-- 日志文件管理 -->
+                <div class="card">
+                    <h2>📁 日志文件管理</h2>
+                    <div id="log-files-info">
+                        <p>加载中...</p>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <footer>
@@ -306,6 +420,12 @@
             // 如果切换到配置管理，加载配置
             if (tabName === 'config') {
                 loadConfig();
+            }
+            // 如果切换到日志查看，加载日志
+            if (tabName === 'logs') {
+                loadLogFiles();
+                loadLogs();
+                loadLogStats();
             }
         }
 
@@ -897,27 +1017,44 @@
         // 加载示例
         function loadExample(type) {
             const examples = {
-                tspl: {
+                simple_chinese: {
                     "print_type": "label",
-                    "zpl_code": "SIZE 60 mm, 40 mm\nGAP 1 mm, 0 mm\nDIRECTION 1,0\nREFERENCE 0,0\nOFFSET 0 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n"
+                    "title": "测试",
+                    "fields": [
+                        {"label": "产品", "value": "元件A", "font_size": 20}
+                    ]
                 },
-                zpl: {
+                mixed: {
                     "print_type": "label",
-                    "zpl_code": "^XA^FO20,10^A0N,25,25^FD测试标签^FS^XZ"
-                },
-                escpos: {
-                    "print_type": "escpos",
-                    "raw_text": "测试打印\n商品A    10.00\n商品B    20.00\n总计:    30.00\n谢谢惠顾!\n\n\n"
-                },
-                receipt: {
-                    "print_type": "escpos",
-                    "title": "销售收据",
-                    "items": [
-                        {"name": "商品A", "qty": 2, "price": 10.00},
-                        {"name": "商品B", "qty": 1, "price": 20.00}
+                    "title": "Product 产品",
+                    "fields": [
+                        {"label": "Name", "value": "Component-A", "font_size": 22},
+                        {"label": "名称", "value": "电子元件", "font_size": 22}
                     ],
-                    "total": 40.00,
-                    "footer": "感谢惠顾"
+                    "barcode": "TEST001"
+                },
+                zpl_chinese: {
+                    "print_type": "label",
+                    "zpl_code": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello^FS^XZ"
+                },
+                zpl_english: {
+                    "print_type": "label",
+                    "zpl_code": "^XA^FO50,50^A0N,40,40^FDEnglish Test^FS^FO50,120^BCN,80,Y,N,N^FD123456^FS^XZ"
+                },
+                deli_receipt: {
+                    "print_type": "escpos",
+                    "title": "销售小票",
+                    "items": [
+                        {"name": "商品A", "qty": 2, "price": 15.50},
+                        {"name": "商品B", "qty": 1, "price": 30.00}
+                    ],
+                    "total": 61.00,
+                    "footer": "谢谢惠顾!"
+                },
+                deli_raw: {
+                    "print_type": "escpos",
+                    "raw_text": "测试打印\n商品A  15.00\n商品B  30.00\n总计:  45.00\n谢谢!\n\n\n",
+                    "encoding": "gb2312"
                 }
             };
             
@@ -926,6 +1063,197 @@
             }
         }
 
+        // ===== 日志相关函数 =====
+        
+        // 加载日志文件列表
+        async function loadLogFiles() {
+            try {
+                const response = await fetch('/api/logs/files');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const select = document.getElementById('log-file-select');
+                    select.innerHTML = '<option value="">最新日志</option>';
+                    
+                    data.stats.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.name;
+                        option.textContent = `${file.name} (${formatFileSize(file.size)}, ${file.modified})`;
+                        select.appendChild(option);
+                    });
+                    
+                    // 显示文件信息
+                    displayLogFilesInfo(data.stats);
+                }
+            } catch (error) {
+                console.error('加载日志文件列表失败:', error);
+            }
+        }
+        
+        // 显示日志文件信息
+        function displayLogFilesInfo(stats) {
+            const filesInfoDiv = document.getElementById('log-files-info');
+            
+            let html = `
+                <div class="log-file-stats">
+                    <p><strong>日志文件总数:</strong> ${stats.total_files}</p>
+                    <p><strong>总大小:</strong> ${formatFileSize(stats.total_size)}</p>
+                    <p><strong>保留期限:</strong> 7天（自动清理）</p>
+                </div>
+            `;
+            
+            if (stats.files.length > 0) {
+                html += '<div class="log-files-list"><h3>文件列表</h3>';
+                stats.files.forEach(file => {
+                    html += `
+                        <div class="log-file-item">
+                            <span class="file-name">📄 ${file.name}</span>
+                            <span class="file-size">${formatFileSize(file.size)}</span>
+                            <span class="file-modified">${file.modified}</span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+            
+            filesInfoDiv.innerHTML = html;
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        // 加载日志内容
+        async function loadLogs() {
+            const filename = document.getElementById('log-file-select').value;
+            const lines = parseInt(document.getElementById('log-lines').value);
+            const level = document.getElementById('log-level-filter').value;
+            const search = document.getElementById('log-search').value;
+            
+            const logViewer = document.getElementById('log-viewer');
+            logViewer.innerHTML = '<p class="log-loading">加载中...</p>';
+            
+            try {
+                let url = `/api/logs?lines=${lines}`;
+                if (filename) url += `&filename=${filename}`;
+                if (level) url += `&level=${level}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayLogs(data.logs);
+                    document.getElementById('log-count').textContent = data.count;
+                } else {
+                    logViewer.innerHTML = `<p class="log-error">加载失败: ${data.error}</p>`;
+                }
+            } catch (error) {
+                logViewer.innerHTML = `<p class="log-error">加载失败: ${error.message}</p>`;
+            }
+        }
+        
+        // 显示日志内容
+        function displayLogs(logs) {
+            const logViewer = document.getElementById('log-viewer');
+            
+            if (logs.length === 0) {
+                logViewer.innerHTML = '<p class="log-empty">没有找到日志记录</p>';
+                return;
+            }
+            
+            let html = '<div class="log-entries">';
+            logs.forEach(log => {
+                const levelClass = `log-level-${log.level.toLowerCase()}`;
+                html += `
+                    <div class="log-entry ${levelClass}">
+                        <span class="log-timestamp">${log.timestamp}</span>
+                        <span class="log-level">[${log.level}]</span>
+                        <span class="log-logger">${log.logger}</span>
+                        <span class="log-message">${escapeHtml(log.message)}</span>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            logViewer.innerHTML = html;
+        }
+        
+        // HTML转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // 加载日志统计
+        async function loadLogStats() {
+            try {
+                const filename = document.getElementById('log-file-select').value;
+                let url = '/api/logs/stats';
+                if (filename) url += `?filename=${filename}`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('log-error-count').textContent = data.level_counts.ERROR || 0;
+                    document.getElementById('log-warning-count').textContent = data.level_counts.WARNING || 0;
+                    document.getElementById('log-info-count').textContent = data.level_counts.INFO || 0;
+                }
+            } catch (error) {
+                console.error('加载日志统计失败:', error);
+            }
+        }
+        
+        // 刷新日志
+        function refreshLogs() {
+            loadLogs();
+            loadLogStats();
+        }
+        
+        // 日志文件切换
+        function onLogFileChange() {
+            loadLogs();
+            loadLogStats();
+        }
+        
+        // 搜索框回车事件
+        function onLogSearchKeyup(event) {
+            if (event.key === 'Enter') {
+                loadLogs();
+            }
+        }
+        
+        // 清理过期日志
+        async function cleanOldLogs() {
+            if (!confirm('确定要清理7天前的过期日志吗？')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/logs/clean', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(data.message);
+                    loadLogFiles();  // 重新加载文件列表
+                } else {
+                    alert('清理失败: ' + data.error);
+                }
+            } catch (error) {
+                alert('清理失败: ' + error.message);
+            }
+        }
+        
         // 页面加载时初始化
         window.addEventListener('DOMContentLoaded', () => {
             checkStatus();
