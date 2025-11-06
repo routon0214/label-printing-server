@@ -19,8 +19,8 @@ def convert_zpl_chinese_to_image(zpl_code):
     自动检测并转换ZPL代码中的中文为图像
     
     支持多种ZPL格式:
-    1. 标准ZPL: ^FO...^FD中文^FS
-    2. 直接文本: 任何中文字符
+    1. 标准ZPL: ^FO...^A...^FD中文^FS
+    2. 单行ZPL: ^XA^FO20,10^A0N,25,25^FD测试^FS^XZ
     
     Args:
         zpl_code: 原始ZPL代码
@@ -35,57 +35,53 @@ def convert_zpl_chinese_to_image(zpl_code):
     
     print("  检测到ZPL代码包含中文，开始转换...")
     
-    lines = zpl_code.split('\n')
-    converted_lines = []
     conversion_count = 0
     
-    for line in lines:
-        # 检查是否包含中文
-        if not has_chinese(line):
-            converted_lines.append(line)
-            continue
-        
-        # 尝试匹配 ^FD...^FS 格式（ZPL文本命令）
-        fd_pattern = r'(\^F[OW]\d+,\d+.*?\^A[^F]*?\^FD)([^^]+?)(\^FS)'
-        match = re.search(fd_pattern, line)
-        
-        if match:
-            prefix = match.group(1)  # ^FO...^FD
-            text = match.group(2)     # 文本内容
-            suffix = match.group(3)   # ^FS
-            
-            if has_chinese(text):
-                print(f"  转换中文文本: {text[:30]}{'...' if len(text) > 30 else ''}")
-                
-                # 提取位置信息
-                pos_match = re.search(r'\^F[OW](\d+),(\d+)', prefix)
-                if pos_match:
-                    x, y = pos_match.groups()
-                    
-                    # 转换为图像
-                    hex_data, width, height, bpr, total = text_to_image_zpl(text, font_size=30)
-                    
-                    if hex_data:
-                        # 生成图像命令
-                        image_cmd = f"^FO{x},{y}^GFA,{total},{total},{bpr},{hex_data}^FS"
-                        converted_lines.append(image_cmd)
-                        conversion_count += 1
-                        continue
-            
-        # 如果没有匹配到标准格式但包含中文，保留原样但添加警告
-        if has_chinese(line) and not line.strip().startswith('//'):
-            print(f"  警告: 包含中文但无法自动转换的行: {line[:50]}...")
-        
-        converted_lines.append(line)
+    # 匹配 ^FO...^A...^FD中文^FS 模式
+    # 支持单行和多行ZPL
+    pattern = r'(\^FO\d+,\d+)(\^A[^\^]*?)(\^FD)([^\^]+?)(\^FS)'
     
-    result = '\n'.join(converted_lines)
+    def replace_chinese(match):
+        nonlocal conversion_count
+        fo_pos = match.group(1)  # ^FO20,10
+        a_font = match.group(2)   # ^A0N,25,25
+        fd_start = match.group(3) # ^FD
+        text = match.group(4)      # 测试标签
+        fs_end = match.group(5)    # ^FS
+        
+        # 只转换包含中文的文本
+        if not has_chinese(text):
+            return match.group(0)  # 保持原样
+        
+        print(f"  转换中文文本: {text[:30]}{'...' if len(text) > 30 else ''}")
+        
+        # 提取位置
+        pos_match = re.search(r'\^FO(\d+),(\d+)', fo_pos)
+        if not pos_match:
+            return match.group(0)
+        
+        x, y = pos_match.groups()
+        
+        # 转换为图像
+        hex_data, width, height, bpr, total = text_to_image_zpl(text, font_size=30)
+        
+        if hex_data:
+            conversion_count += 1
+            # 生成图像命令（保持^XA和其他命令的位置）
+            return f"^FO{x},{y}^GFA,{total},{total},{bpr},{hex_data}^FS"
+        else:
+            # 转换失败，保持原样
+            return match.group(0)
+    
+    # 执行替换
+    converted_zpl = re.sub(pattern, replace_chinese, zpl_code)
     
     if conversion_count > 0:
         print(f"  [OK] 成功转换 {conversion_count} 处中文文本为图像")
     else:
         print("  [WARNING] 未能转换任何中文文本，可能格式不标准")
     
-    return result
+    return converted_zpl
 
 
 def detect_and_convert_zpl(zpl_code):
