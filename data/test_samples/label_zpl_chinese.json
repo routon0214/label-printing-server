@@ -1,0 +1,6 @@
+{
+  "print_type": "label",
+  "format": "zpl",
+  "content": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello World^FS^XZ"
+}
+

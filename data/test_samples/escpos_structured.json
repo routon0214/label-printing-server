@@ -1,0 +1,15 @@
+{
+  "print_type": "escpos",
+  "format": "structured",
+  "content": {
+    "title": "销售小票",
+    "items": [
+      {"name": "商品A", "qty": 2, "price": 15.50},
+      {"name": "Product B", "qty": 1, "price": 30.00},
+      {"name": "测试商品C", "qty": 3, "price": 8.00}
+    ],
+    "total": 85.00,
+    "footer": "谢谢惠顾 Thank you!"
+  }
+}
+

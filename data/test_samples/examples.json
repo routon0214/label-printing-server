@@ -5,47 +5,42 @@
       "title": "简单中文标签",
       "desc": "最简单的中文标签示例，适合快速测试",
       "category": "标签打印",
-      "file": "zd888_chinese_simple.json"
+      "file": "label_chinese_simple.json"
     },
     {
       "id": "mixed",
       "title": "中英文混合标签",
       "desc": "包含中英文混合内容和条形码、二维码的标签",
       "category": "标签打印",
-      "file": "zd888_chinese_mixed.json"
+      "file": "label_chinese_mixed.json"
     },
     {
       "id": "zpl_chinese",
       "title": "ZPL代码含中文",
       "desc": "直接使用ZPL代码打印，包含中文内容（自动转换为图像）",
       "category": "标签打印",
-      "file": null,
-      "data": {
-        "print_type": "label",
-        "zpl_code": "^XA^FO50,50^A0N,40,40^FD你好世界^FS^FO50,120^A0N,30,30^FDHello^FS^XZ"
-      }
+      "file": "label_zpl_chinese.json"
     },
     {
       "id": "zpl_english",
       "title": "纯英文ZPL",
       "desc": "纯英文ZPL代码，包含条形码",
       "category": "标签打印",
-      "file": "zd888_english.zpl",
-      "wrap_zpl": true
+      "file": "label_zpl_english.json"
     },
     {
       "id": "deli_receipt",
       "title": "ESC/POS小票（结构化）",
       "desc": "使用结构化数据打印小票，包含商品列表和总价",
       "category": "小票打印",
-      "file": "escpos_chinese.json"
+      "file": "escpos_structured.json"
     },
     {
       "id": "deli_raw",
       "title": "ESC/POS小票（纯文本）",
-      "desc": "使用纯文本内容打印，支持ZPL命令",
+      "desc": "使用纯文本内容打印，支持ZPL命令等原始文本",
       "category": "小票打印",
-      "file": "escpos_raw_text.json"
+      "file": "escpos_raw.json"
     }
   ]
 }

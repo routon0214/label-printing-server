@@ -321,6 +321,63 @@ def start_mqtt_client():
         return False
 
 
+def normalize_print_data(data):
+    """
+    将打印数据标准化为统一格式
+    
+    旧格式自动转换为新格式：
+    - zpl_code → format: "zpl", content: zpl_code
+    - raw_text → format: "raw", content: raw_text
+    - fields → format: "structured", content: {fields, ...}
+    
+    Args:
+        data: 打印数据字典
+        
+    Returns:
+        标准化后的数据
+    """
+    # 如果已经是新格式（包含format和content字段），直接返回
+    if 'format' in data and 'content' in data:
+        return data
+    
+    print_type = data.get('print_type', 'label')
+    
+    # 向后兼容：转换旧格式
+    if 'zpl_code' in data:
+        # 旧格式: zpl_code
+        return {
+            'print_type': print_type,
+            'format': 'zpl',
+            'content': data['zpl_code']
+        }
+    
+    elif 'raw_text' in data:
+        # 旧格式: raw_text
+        return {
+            'print_type': print_type,
+            'format': 'raw',
+            'content': data['raw_text'],
+            'encoding': data.get('encoding', 'gb2312')
+        }
+    
+    elif 'fields' in data or 'title' in data or 'items' in data:
+        # 旧格式: 结构化数据
+        content = {}
+        # 复制所有字段到content（除了print_type）
+        for key, value in data.items():
+            if key != 'print_type':
+                content[key] = value
+        
+        return {
+            'print_type': print_type,
+            'format': 'structured',
+            'content': content
+        }
+    
+    # 无法识别的格式，原样返回
+    return data
+
+
 def get_printer_instance(print_type, printer_config=None):
     """
     根据打印类型获取打印机实例
@@ -642,7 +699,15 @@ async def print_raw(
                 content={"success": False, "error": "无效的JSON数据"}
             )
         
-        print_type = data.get('print_type', 'label').lower()
+        # 标准化数据格式（支持新旧格式）
+        normalized_data = normalize_print_data(data)
+        print_type = normalized_data.get('print_type', 'label').lower()
+        data_format = normalized_data.get('format', 'structured')
+        content = normalized_data.get('content')
+        
+        print(f"\n[打印请求]")
+        print(f"  类型: {print_type}")
+        print(f"  格式: {data_format}")
         
         # 获取打印机实例
         printer = get_printer_instance(print_type)
@@ -656,20 +721,27 @@ async def print_raw(
         
         if print_type == 'label':
             # ZPL标签打印
-            if 'zpl_code' in data:
-                zpl_code = data['zpl_code']
+            if data_format == 'zpl':
+                # 直接ZPL代码
+                zpl_code = content
                 print(f"  [DEBUG] 原始ZPL长度: {len(zpl_code)} 字符")
                 # 自动检测并转换ZPL中的中文
                 zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
                 if was_converted:
-                    print("  [OK] JSON中的ZPL代码，中文已自动转换为图像")
+                    print("  [OK] ZPL代码中文已自动转换为图像")
+            
+            elif data_format == 'structured':
+                # 结构化数据，生成ZPL
+                print("  [INFO] 从结构化数据生成ZPL...")
+                zpl_code = zpl_generator.generate_label_zpl(content)
+            
             else:
-                # 自动生成ZPL（已包含中文转图像）
-                print("  [INFO] 从JSON数据生成ZPL...")
-                zpl_code = zpl_generator.generate_label_zpl(data)
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": f'不支持的标签格式: {data_format}'}
+                )
             
             # 调试：保存实际发送的ZPL代码
-            import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             debug_file = f"data/debug_web_json_{timestamp}.zpl"
             try:
@@ -677,8 +749,6 @@ async def print_raw(
                     f.write(zpl_code)
                 print(f"  [DEBUG] ZPL已保存到: {debug_file}")
                 print(f"  [DEBUG] ZPL长度: {len(zpl_code)} 字符")
-                print(f"  [DEBUG] ZPL开头: {zpl_code[:80]}...")
-                print(f"  [DEBUG] ZPL结尾: ...{zpl_code[-80:]}")
             except Exception as debug_error:
                 print(f"  [WARNING] 无法保存调试文件: {debug_error}")
             
@@ -697,7 +767,22 @@ async def print_raw(
         
         elif print_type in ['receipt', 'escpos']:
             # ESC/POS小票打印
-            success = printer.print_receipt(data)
+            if data_format == 'raw':
+                # 原始文本格式
+                receipt_data = {
+                    'raw_text': content,
+                    'encoding': normalized_data.get('encoding', 'gb2312')
+                }
+            elif data_format == 'structured':
+                # 结构化格式
+                receipt_data = content
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": f'不支持的小票格式: {data_format}'}
+                )
+            
+            success = printer.print_receipt(receipt_data)
         
         else:
             return JSONResponse(
@@ -1276,25 +1361,9 @@ async def get_example_data(example_id: str, username: str = Depends(verify_crede
                 content={"success": False, "error": f"示例文件 '{file_name}' 不存在"}
             )
         
-        # 读取文件内容
+        # 读取文件内容（统一使用JSON格式）
         with open(file_path, 'r', encoding='utf-8') as f:
-            if file_name.endswith('.json'):
-                data = json.load(f)
-            elif file_name.endswith('.zpl'):
-                # ZPL文件需要包装成JSON格式
-                zpl_content = f.read()
-                if example.get('wrap_zpl'):
-                    data = {
-                        "print_type": "label",
-                        "zpl_code": zpl_content
-                    }
-                else:
-                    data = zpl_content
-            else:
-                # 其他文本文件
-                data = {
-                    "raw_text": f.read()
-                }
+            data = json.load(f)
         
         return JSONResponse({
             "success": True,

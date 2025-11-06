@@ -1,0 +1,6 @@
+{
+  "print_type": "label",
+  "format": "zpl",
+  "content": "^XA\n^FO50,50^A0N,40,40^FDEnglish Test^FS\n^FO50,100^A0N,30,30^FDZD888 Printer^FS\n^FO50,150^A0N,25,25^FDDate: 2025-11-06^FS\n^FO50,200^BCN,80,Y,N,N^FD123456789^FS\n^XZ\n"
+}
+
