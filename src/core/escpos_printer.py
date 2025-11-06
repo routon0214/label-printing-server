@@ -77,7 +77,7 @@ class ESCPOSPrinter:
                 2. 原始文本格式:
                 {
                     "raw_text": "原始文本内容\\n换行",
-                    "encoding": "utf-8"  # 可选，默认utf-8
+                    "encoding": "gb2312"  # 可选，推荐gb2312/gbk（中文打印）
                 }
                 
         Returns:
@@ -86,29 +86,53 @@ class ESCPOSPrinter:
         # 如果包含 raw_text 字段，直接打印原始文本
         if 'raw_text' in receipt_data:
             raw_text = receipt_data.get('raw_text', '')
-            encoding = receipt_data.get('encoding', 'utf-8')
+            # 对于中文打印机，推荐使用 gb2312 或 gbk 编码
+            encoding = receipt_data.get('encoding', 'gb2312')
             
-            # 处理转义字符（如 \\n 转换为实际的换行符）
-            # JSON解析后，\\n 会被解析为字符串 \n（单个反斜杠+n），需要转换为实际的换行符
-            try:
-                # 使用 codecs.decode 处理转义序列（如 \n, \t 等）
-                raw_text = codecs.decode(raw_text, 'unicode_escape')
-            except Exception:
-                # 如果解码失败，使用原始文本
-                pass
+            # 注意：JSON解析器已经处理了 \n, \t 等转义字符
+            # 不需要再次解码，否则会破坏中文字符
+            # 直接使用原始文本即可
             
-            # 将文本转换为字节
-            try:
-                text_bytes = raw_text.encode(encoding)
-            except (UnicodeEncodeError, LookupError):
-                # 如果编码失败，尝试使用utf-8
-                text_bytes = raw_text.encode('utf-8', errors='ignore')
-            
-            # 生成ESC/POS指令（初始化 + 文本内容）
+            # 生成ESC/POS指令
             commands = bytearray()
-            commands.extend(self.CMD_INIT)  # 初始化打印机
-            commands.extend(text_bytes)  # 添加文本内容
-            commands.extend(self.LF * 2)  # 添加换行
+            
+            # 1. 初始化打印机
+            commands.extend(self.CMD_INIT)  # ESC @ - 初始化
+            
+            # 2. 设置字符集为简体中文（关键！避免乱码）
+            # ESC t n - 选择字符代码表
+            # n=14 (0x0E) = 简体中文 GB2312
+            commands.extend(b'\x1B\x74\x0E')
+            
+            # 3. 将文本转换为字节
+            print(f"  原始文本长度: {len(raw_text)} 字符")
+            print(f"  原始文本预览: {raw_text[:100]}...")
+            
+            try:
+                # 首选 gb2312/gbk 编码（最适合中文ESC/POS打印机）
+                if encoding.lower() in ['gb2312', 'gbk', 'gb18030']:
+                    text_bytes = raw_text.encode(encoding, errors='ignore')
+                    print(f"  ✓ 使用编码: {encoding}")
+                    print(f"  ✓ 编码后字节数: {len(text_bytes)}")
+                else:
+                    # 如果指定其他编码，尝试使用，失败则fallback到gb2312
+                    try:
+                        text_bytes = raw_text.encode(encoding, errors='ignore')
+                        print(f"  ✓ 使用编码: {encoding}")
+                        print(f"  ✓ 编码后字节数: {len(text_bytes)}")
+                    except (UnicodeEncodeError, LookupError):
+                        text_bytes = raw_text.encode('gb2312', errors='ignore')
+                        print(f"  ⚠ 警告: {encoding}编码失败，使用gb2312")
+            except (UnicodeEncodeError, LookupError) as e:
+                # 如果所有编码都失败，使用gb2312并替换无法编码的字符
+                text_bytes = raw_text.encode('gb2312', errors='ignore')
+                print(f"  ⚠ 警告: 编码失败 ({e})，使用gb2312")
+            
+            # 4. 添加文本内容
+            commands.extend(text_bytes)
+            
+            # 5. 添加换行
+            commands.extend(self.LF * 2)
             
             # 发送到打印机
             return self.send_commands(bytes(commands))
@@ -124,8 +148,13 @@ class ESCPOSPrinter:
         """生成小票ESC/POS指令"""
         commands = bytearray()
         
-        # 初始化打印机
+        # 1. 初始化打印机
         commands.extend(self.CMD_INIT)
+        
+        # 2. 设置字符集为简体中文（关键！避免乱码）
+        # ESC t n - 选择字符代码表
+        # n=14 (0x0E) = 简体中文 GB2312
+        commands.extend(b'\x1B\x74\x0E')
         
         # 标题（居中、加粗、双倍大小）
         title = data.get('title', '收据')
@@ -229,10 +258,10 @@ class ESCPOSPrinter:
             sock.connect((self.printer_ip, self.printer_port))
             sock.sendall(commands)
             sock.close()
-            print(f"[OK] ESC/POS网络打印成功: {self.printer_ip}:{self.printer_port}")
+            print(f"✓ ESC/POS网络打印成功: {self.printer_ip}:{self.printer_port}")
             return True
         except Exception as e:
-            print(f"[ERROR] ESC/POS网络打印失败: {e}")
+            print(f"✗ ESC/POS网络打印失败: {e}")
             return False
     
     def _send_windows(self, commands):
@@ -249,14 +278,14 @@ class ESCPOSPrinter:
             win32print.EndDocPrinter(printer_handle)
             win32print.ClosePrinter(printer_handle)
             
-            print(f"[OK] ESC/POS Windows打印成功: {self.printer_name}")
+            print(f"✓ ESC/POS Windows打印成功: {self.printer_name}")
             return True
             
         except ImportError:
             print("错误：需要安装 pywin32: pip install pywin32")
             return False
         except Exception as e:
-            print(f"[ERROR] ESC/POS Windows打印失败: {e}")
+            print(f"✗ ESC/POS Windows打印失败: {e}")
             return False
     
     def _send_device(self, commands):
@@ -265,14 +294,14 @@ class ESCPOSPrinter:
             with open(self.device_path, 'wb') as device:
                 device.write(commands)
             
-            print(f"[OK] ESC/POS设备打印成功: {self.device_path}")
+            print(f"✓ ESC/POS设备打印成功: {self.device_path}")
             return True
             
         except PermissionError:
-            print(f"[ERROR] 权限不足: {self.device_path}")
+            print(f"✗ 权限不足: {self.device_path}")
             print(f"提示：sudo chmod 666 {self.device_path}")
             return False
         except Exception as e:
-            print(f"[ERROR] ESC/POS设备打印失败: {e}")
+            print(f"✗ ESC/POS设备打印失败: {e}")
             return False
 
