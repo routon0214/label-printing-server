@@ -17,7 +17,7 @@
   },
   "printers": [
     {
-      "name": "ZD888",
+      "name": "ZT411",
       "types": [
         "label"
       ],
@@ -25,7 +25,18 @@
       "port": 9100,
       "device": null,
       "default": false,
-      "_comment": "斑马标签打印机 ZD888-203dpi - 处理ZPL标签"
+      "_comment": "斑马标签打印机 ZDesigner ZT411-300dpi ZPL - 处理ZPL标签"
+    },
+    {
+      "name": "Deli",
+      "types": [
+        "receipt", "escpos"
+      ],
+      "ip": null,
+      "port": 9100,
+      "device": null,
+      "default": false,
+      "_comment": "得力打印机 DL-888T - ESC/POS小票打印"
     },
     {
       "name": "KONICA MINOLTA Universal PCL",

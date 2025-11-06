@@ -514,6 +514,17 @@ async def print_file(
             if was_converted:
                 print("  [OK] ZPL中文已自动转换为图像")
             
+            # 调试：保存实际发送的ZPL代码
+            debug_file = f"data/debug_web_upload_{filename}"
+            try:
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(zpl_code)
+                print(f"  [DEBUG] ZPL已保存到: {debug_file}")
+                print(f"  [DEBUG] ZPL长度: {len(zpl_code)} 字符")
+                print(f"  [DEBUG] ZPL预览: {zpl_code[:100]}...")
+            except Exception as debug_error:
+                print(f"  [WARNING] 无法保存调试文件: {debug_error}")
+            
             success = printer.print_label(zpl_code)
             if not success:
                 error_msg = '标签打印失败'
@@ -631,13 +642,30 @@ async def print_raw(
             # ZPL标签打印
             if 'zpl_code' in data:
                 zpl_code = data['zpl_code']
+                print(f"  [DEBUG] 原始ZPL长度: {len(zpl_code)} 字符")
                 # 自动检测并转换ZPL中的中文
                 zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
                 if was_converted:
                     print("  [OK] JSON中的ZPL代码，中文已自动转换为图像")
             else:
                 # 自动生成ZPL（已包含中文转图像）
+                print("  [INFO] 从JSON数据生成ZPL...")
                 zpl_code = zpl_generator.generate_label_zpl(data)
+            
+            # 调试：保存实际发送的ZPL代码
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            debug_file = f"data/debug_web_json_{timestamp}.zpl"
+            try:
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(zpl_code)
+                print(f"  [DEBUG] ZPL已保存到: {debug_file}")
+                print(f"  [DEBUG] ZPL长度: {len(zpl_code)} 字符")
+                print(f"  [DEBUG] ZPL开头: {zpl_code[:80]}...")
+                print(f"  [DEBUG] ZPL结尾: ...{zpl_code[-80:]}")
+            except Exception as debug_error:
+                print(f"  [WARNING] 无法保存调试文件: {debug_error}")
+            
             success = printer.print_label(zpl_code)
         
         elif print_type == 'pdf':

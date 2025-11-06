@@ -26,16 +26,22 @@ def text_to_image_zpl(text, font_size=30):
         # 尝试加载中文字体
         font = None
         font_paths = get_font_paths()
+        font_loaded = None
         
         for font_path in font_paths:
             if os.path.exists(font_path):
                 try:
                     font = ImageFont.truetype(font_path, font_size)
+                    font_loaded = font_path
+                    print(f"  使用字体: {os.path.basename(font_path)}")
                     break
-                except:
+                except Exception as e:
+                    print(f"  字体加载失败 {font_path}: {e}")
                     continue
         
         if font is None:
+            print("  警告：未找到中文字体，使用默认字体（可能无法正确显示中文）")
+            print(f"  尝试的字体路径: {', '.join([os.path.basename(p) for p in font_paths])}")
             font = ImageFont.load_default()
         
         # 创建临时图像测量文本大小
@@ -76,12 +82,17 @@ def text_to_image_zpl(text, font_size=30):
         hex_string = ''.join(hex_data)
         total_bytes = len(hex_string) // 2
         
+        print(f"  文本转换成功: '{text[:20]}{'...' if len(text) > 20 else ''}' -> {img_width}x{img_height}px ({total_bytes} bytes)")
+        
         return hex_string, img_width, img_height, bytes_per_row, total_bytes
         
     except ImportError:
-        print("警告：需要安装 Pillow 库支持中文: pip install Pillow")
+        print("[ERROR] 错误：需要安装 Pillow 库支持中文: pip install Pillow")
+        print("  安装命令: pip install Pillow")
         return None, 0, 0, 0, 0
     except Exception as e:
-        print(f"文本转图像失败: {e}")
+        print(f"[ERROR] 文本转图像失败: {e}")
+        import traceback
+        traceback.print_exc()
         return None, 0, 0, 0, 0
 
