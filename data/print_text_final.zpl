@@ -1,0 +1,13 @@
+SIZE 60 mm, 40 mm
+ GAP 1 mm, 0 mm
+ DIRECTION 1,0
+ REFERENCE 0,0
+ OFFSET 0 mm
+ CLS
+TEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"
+QRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"
+TEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"
+TEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"
+TEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"
+TEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"
+PRINT 1
