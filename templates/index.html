@@ -44,6 +44,67 @@
             <!-- 打印测试Tab -->
             <div id="print-tab" class="main-tab-content active">
                 <div class="card">
+                    <h2>📋 快速示例</h2>
+                    <div class="example-selector">
+                        <div class="form-group">
+                            <label for="example-select">选择示例模板并一键加载:</label>
+                            <div style="display: flex; gap: 10px; align-items: flex-start;">
+                                <select id="example-select" style="flex: 1;" onchange="onExampleSelectAndLoad()">
+                                    <option value="">请选择示例...</option>
+                                    <optgroup label="标签打印">
+                                        <option value="simple_chinese">简单中文标签（推荐）</option>
+                                        <option value="mixed">中英文混合标签</option>
+                                        <option value="zpl_chinese">ZPL代码含中文</option>
+                                        <option value="zpl_english">纯英文ZPL</option>
+                                    </optgroup>
+                                    <optgroup label="小票打印">
+                                        <option value="deli_receipt">ESC/POS小票（结构化）</option>
+                                        <option value="deli_raw">ESC/POS小票（纯文本）</option>
+                                    </optgroup>
+                                </select>
+                                <button class="btn btn-primary" onclick="quickPrintExample()" id="quick-print-btn" style="white-space: nowrap; min-width: 120px;" disabled>
+                                    <span>⚡ 快速打印</span>
+                                </button>
+                            </div>
+                            <small>💡 选择示例后自动加载，可直接点击"快速打印"或编辑后再打印</small>
+                        </div>
+                        
+                        <div id="example-preview-mini" class="example-preview-mini" style="display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong id="example-title-mini"></strong>
+                                    <span id="example-desc-mini" style="color: #666; margin-left: 10px;"></span>
+                                </div>
+                                <button class="btn btn-small" onclick="toggleExampleCode()" id="toggle-code-btn">
+                                    <span>👁️ 查看代码</span>
+                                </button>
+                            </div>
+                            <pre id="example-code-full" style="display: none; margin-top: 10px;"><code id="example-code"></code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📝 JSON数据打印</h2>
+                    <form id="json-form">
+                        <div class="form-group">
+                            <label for="json-input">JSON数据:</label>
+                            <textarea id="json-input" name="json_data" rows="10" 
+                                      placeholder='{"print_type": "label", "format": "structured", "content": {"title": "测试", "fields": [{"label": "产品", "value": "元件A", "font_size": 20}]}}'></textarea>
+                            <small>支持标签、PDF、小票打印的JSON格式数据</small>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" id="json-btn" class="btn btn-primary">
+                                <span class="btn-text">📤 发送打印</span>
+                                <span class="btn-loading" style="display: none;">处理中...</span>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="json-result" class="result-message" style="display: none;"></div>
+                </div>
+
+                <div class="card">
                     <h2>📤 文件上传打印</h2>
                     <form id="upload-form" enctype="multipart/form-data">
                         <div class="form-group">
@@ -70,56 +131,6 @@
                         </div>
                     </form>
                     <div id="upload-result" class="result-message" style="display: none;"></div>
-                </div>
-
-                <div class="card">
-                    <h2>📝 JSON数据打印</h2>
-                    <form id="json-form">
-                        <div class="form-group">
-                            <label for="json-input">JSON数据:</label>
-                            <textarea id="json-input" name="json_data" rows="10" 
-                                      placeholder='{"print_type": "label", "title": "测试", "fields": [{"label": "产品", "value": "元件A", "font_size": 20}]}'></textarea>
-                            <small>支持标签、PDF、小票打印的JSON格式数据</small>
-                        </div>
-
-                        <div class="form-group">
-                            <button type="submit" id="json-btn" class="btn btn-primary">
-                                <span class="btn-text">发送打印</span>
-                                <span class="btn-loading" style="display: none;">处理中...</span>
-                            </button>
-                        </div>
-                    </form>
-                    <div id="json-result" class="result-message" style="display: none;"></div>
-                </div>
-
-                <div class="card">
-                    <h2>📋 快速示例</h2>
-                    <div class="example-selector">
-                        <div class="form-group">
-                            <label for="example-select">选择示例模板:</label>
-                            <select id="example-select" onchange="onExampleChange()">
-                                <option value="">请选择示例...</option>
-                                <optgroup label="标签打印">
-                                    <option value="simple_chinese">简单中文标签（推荐）</option>
-                                    <option value="mixed">中英文混合标签</option>
-                                    <option value="zpl_chinese">ZPL代码含中文</option>
-                                    <option value="zpl_english">纯英文ZPL</option>
-                                </optgroup>
-                                <optgroup label="小票打印">
-                                    <option value="deli_receipt">ESC/POS小票（结构化）</option>
-                                    <option value="deli_raw">ESC/POS小票（纯文本）</option>
-                                </optgroup>
-                            </select>
-                            <small>选择示例后会自动加载到上方的JSON输入框</small>
-                        </div>
-                        
-                        <div id="example-preview" class="example-preview" style="display: none;">
-                            <h3 id="example-title"></h3>
-                            <p id="example-desc"></p>
-                            <pre><code id="example-code"></code></pre>
-                            <button class="btn btn-primary" onclick="loadSelectedExample()">📥 加载到编辑器</button>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -1059,14 +1070,16 @@
             }
         }
         
-        // 示例选择改变事件
-        async function onExampleChange() {
+        // 示例选择并自动加载
+        async function onExampleSelectAndLoad() {
             const select = document.getElementById('example-select');
             const exampleId = select.value;
-            const preview = document.getElementById('example-preview');
+            const previewMini = document.getElementById('example-preview-mini');
+            const quickPrintBtn = document.getElementById('quick-print-btn');
             
             if (!exampleId) {
-                preview.style.display = 'none';
+                previewMini.style.display = 'none';
+                quickPrintBtn.disabled = true;
                 return;
             }
             
@@ -1084,66 +1097,92 @@
                         examplesCache[exampleId] = exampleData;
                     } else {
                         showResult(document.getElementById('json-result'), '加载示例失败: ' + data.error, 'error');
-                        preview.style.display = 'none';
+                        previewMini.style.display = 'none';
+                        quickPrintBtn.disabled = true;
                         return;
                     }
                 }
                 
-                // 显示预览
-                document.getElementById('example-title').textContent = exampleData.example.title;
-                document.getElementById('example-desc').textContent = exampleData.example.desc;
-                document.getElementById('example-code').textContent = JSON.stringify(exampleData.data, null, 2);
-                preview.style.display = 'block';
-            } catch (error) {
-                console.error('加载示例失败:', error);
-                showResult(document.getElementById('json-result'), '加载示例失败: ' + error.message, 'error');
-                preview.style.display = 'none';
-            }
-        }
-        
-        // 加载选中的示例
-        async function loadSelectedExample() {
-            const select = document.getElementById('example-select');
-            const exampleId = select.value;
-            
-            if (!exampleId) return;
-            
-            try {
-                // 从缓存或API获取示例数据
-                let exampleData;
-                if (examplesCache[exampleId]) {
-                    exampleData = examplesCache[exampleId];
-                } else {
-                    const response = await fetch(`/api/examples/${exampleId}`);
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        exampleData = data;
-                        examplesCache[exampleId] = exampleData;
-                    } else {
-                        showResult(document.getElementById('json-result'), '加载示例失败: ' + data.error, 'error');
-                        return;
-                    }
-                }
-                
-                // 加载到编辑器
+                // 自动加载到编辑器
                 document.getElementById('json-input').value = JSON.stringify(exampleData.data, null, 2);
                 
-                // 滚动到JSON输入框
-                document.getElementById('json-input').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // 显示简化预览
+                document.getElementById('example-title-mini').textContent = exampleData.example.title;
+                document.getElementById('example-desc-mini').textContent = '- ' + exampleData.example.desc;
+                document.getElementById('example-code').textContent = JSON.stringify(exampleData.data, null, 2);
+                previewMini.style.display = 'block';
+                
+                // 启用快速打印按钮
+                quickPrintBtn.disabled = false;
                 
                 // 提示
-                showResult(document.getElementById('json-result'), '示例已加载到编辑器', 'success');
+                showResult(document.getElementById('json-result'), '✓ 示例已自动加载，可直接打印或编辑', 'success');
             } catch (error) {
                 console.error('加载示例失败:', error);
                 showResult(document.getElementById('json-result'), '加载示例失败: ' + error.message, 'error');
+                previewMini.style.display = 'none';
+                quickPrintBtn.disabled = true;
             }
         }
         
-        // 保留旧函数以兼容性（不再使用）
-        function loadExample(type) {
-            console.warn('loadExample() 已废弃，请使用 loadSelectedExample()');
+        // 切换代码显示
+        function toggleExampleCode() {
+            const codeElement = document.getElementById('example-code-full');
+            const toggleBtn = document.getElementById('toggle-code-btn');
+            
+            if (codeElement.style.display === 'none') {
+                codeElement.style.display = 'block';
+                toggleBtn.innerHTML = '<span>👁️ 隐藏代码</span>';
+            } else {
+                codeElement.style.display = 'none';
+                toggleBtn.innerHTML = '<span>👁️ 查看代码</span>';
+            }
         }
+        
+        // 快速打印示例
+        async function quickPrintExample() {
+            const jsonInput = document.getElementById('json-input');
+            const jsonBtn = document.getElementById('json-btn');
+            const resultDiv = document.getElementById('json-result');
+            
+            let jsonData;
+            try {
+                jsonData = JSON.parse(jsonInput.value);
+            } catch (error) {
+                showResult(resultDiv, 'JSON格式错误: ' + error.message, 'error');
+                return;
+            }
+            
+            jsonBtn.disabled = true;
+            jsonBtn.querySelector('.btn-text').style.display = 'none';
+            jsonBtn.querySelector('.btn-loading').style.display = 'inline';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/print/raw', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(jsonData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(resultDiv, '⚡ ' + (data.message || '打印任务已发送'), 'success');
+                } else {
+                    showResult(resultDiv, data.error || '打印失败', 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, '请求失败: ' + error.message, 'error');
+            } finally {
+                jsonBtn.disabled = false;
+                jsonBtn.querySelector('.btn-text').style.display = 'inline';
+                jsonBtn.querySelector('.btn-loading').style.display = 'none';
+            }
+        }
+        
 
         // ===== 日志相关函数 =====
         

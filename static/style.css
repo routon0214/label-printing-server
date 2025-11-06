@@ -224,20 +224,20 @@ main {
 }
 
 .btn-primary:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: not-allowed;
+    background: #ccc;
 }
 
 .btn-small {
     padding: 8px 16px;
     font-size: 0.9em;
-    background: #667eea;
+    background: #17a2b8;
     color: white;
-    margin-top: 10px;
 }
 
 .btn-small:hover {
-    background: #5568d3;
+    background: #138496;
 }
 
 .result-message {
@@ -263,15 +263,37 @@ main {
 .example-selector {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 15px;
 }
 
-.example-preview {
-    background: #f8f9fa;
-    padding: 20px;
+/* 简化的示例预览 */
+.example-preview-mini {
+    background: #e8f4f8;
+    padding: 15px;
     border-radius: 8px;
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #17a2b8;
     animation: fadeInOnly 0.2s ease;
+}
+
+.example-preview-mini strong {
+    color: #17a2b8;
+    font-size: 1.05em;
+}
+
+.example-preview-mini pre {
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.5;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.example-preview-mini code {
+    font-family: 'Courier New', monospace;
 }
 
 @keyframes fadeInOnly {
@@ -281,33 +303,6 @@ main {
     to {
         opacity: 1;
     }
-}
-
-.example-preview h3 {
-    color: #667eea;
-    margin-bottom: 8px;
-    font-size: 1.2em;
-}
-
-.example-preview p {
-    color: #666;
-    margin-bottom: 15px;
-    font-size: 0.95em;
-}
-
-.example-preview pre {
-    background: #2d2d2d;
-    color: #f8f8f2;
-    padding: 15px;
-    border-radius: 5px;
-    overflow-x: auto;
-    font-size: 0.85em;
-    line-height: 1.5;
-    margin-bottom: 15px;
-}
-
-.example-preview code {
-    font-family: 'Courier New', monospace;
 }
 
 footer {
