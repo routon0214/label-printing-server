@@ -428,11 +428,109 @@ class LabelPrintMQTT:
                 return
             
             data = json.loads(payload_str)
-            print(f"数据: {json.dumps(data, ensure_ascii=False, indent=2)}")
-            if logger:
-                logger.info(f"消息解析成功，打印类型: {data.get('print_type', 'label')}")
-                logger.debug(f"完整数据: {json.dumps(data, ensure_ascii=False)}")
             
+            # 检测是否为数组格式
+            is_array = isinstance(data, list)
+            
+            if is_array:
+                print(f"检测到数组格式，包含 {len(data)} 个打印任务")
+                if logger:
+                    logger.info(f"收到批量打印任务，共 {len(data)} 个任务")
+                
+                # 处理数组中的每个任务
+                success_count = 0
+                failed_count = 0
+                
+                for idx, item in enumerate(data):
+                    print(f"\n处理任务 {idx + 1}/{len(data)}")
+                    if logger:
+                        logger.info(f"处理批量任务 {idx + 1}/{len(data)}")
+                    
+                    try:
+                        # 验证数据格式：必须是字典
+                        if not isinstance(item, dict):
+                            error_msg = f'任务 {idx + 1} 的数据格式错误：必须是JSON对象，当前类型为 {type(item).__name__}'
+                            print(f"[ERROR] {error_msg}")
+                            if logger:
+                                logger.error(error_msg)
+                            failed_count += 1
+                            continue
+                        
+                        # 处理单个任务
+                        success = self._process_single_print_task(item)
+                        if success:
+                            success_count += 1
+                        else:
+                            failed_count += 1
+                    except Exception as task_error:
+                        error_msg = f'处理任务 {idx + 1} 时出错: {str(task_error)}'
+                        print(f"[ERROR] {error_msg}")
+                        if logger:
+                            logger.error(error_msg, exc_info=True)
+                        failed_count += 1
+                
+                # 批量任务处理结果
+                print(f"\n{'='*60}")
+                print(f"批量打印任务处理完成")
+                print(f"成功: {success_count} 个, 失败: {failed_count} 个")
+                print(f"{'='*60}\n")
+                if logger:
+                    logger.info(f"批量打印任务完成: 成功 {success_count} 个, 失败 {failed_count} 个")
+            else:
+                # 单个对象格式，使用原有逻辑
+                print(f"数据: {json.dumps(data, ensure_ascii=False, indent=2)}")
+                if logger:
+                    logger.info(f"消息解析成功，打印类型: {data.get('print_type', 'label')}")
+                    logger.debug(f"完整数据: {json.dumps(data, ensure_ascii=False)}")
+                
+                # 保存接收到的原始数据用于调试（可选）
+                try:
+                    import os
+                    os.makedirs('data/debug', exist_ok=True)
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    debug_file = f"data/debug/mqtt_received_{timestamp}.json"
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    if logger:
+                        logger.debug(f"接收到的数据已保存到: {debug_file}")
+                except Exception as save_error:
+                    if logger:
+                        logger.warning(f"无法保存调试数据: {save_error}")
+                
+                # 处理单个任务
+                self._process_single_print_task(data)
+        
+        except json.JSONDecodeError as e:
+            error_msg = f"JSON解析失败: {e}"
+            print(f"[ERROR] {error_msg}")
+            if logger:
+                logger.error(f"{error_msg}, 消息内容: {payload_str[:500] if 'payload_str' in locals() else '无法获取'}")
+        except Exception as e:
+            error_msg = f"处理消息失败: {e}"
+            print(f"[ERROR] {error_msg}")
+            import traceback
+            traceback.print_exc()
+            if logger:
+                logger.error(error_msg, exc_info=True)
+                # 记录消息内容以便调试
+                if 'msg' in locals():
+                    try:
+                        payload_preview = msg.payload.decode('utf-8', errors='ignore')[:500]
+                        logger.error(f"失败的消息内容预览: {payload_preview}")
+                    except:
+                        logger.error(f"失败的消息原始数据: {msg.payload[:200]}")
+    
+    def _process_single_print_task(self, data):
+        """
+        处理单个打印任务
+        
+        Args:
+            data: 打印数据字典
+            
+        Returns:
+            bool: 是否成功
+        """
+        try:
             # 保存接收到的原始数据用于调试（可选）
             try:
                 import os
@@ -506,6 +604,8 @@ class LabelPrintMQTT:
                     print(f"{'='*60}\n")
                     if logger:
                         logger.error("PDF打印任务失败")
+                
+                return success
             
             elif print_type == 'receipt' or print_type == 'escpos':
                 # ESC/POS小票打印
@@ -610,6 +710,8 @@ class LabelPrintMQTT:
                     print(f"{'='*60}\n")
                     if logger:
                         logger.error("ESC/POS打印任务失败")
+                
+                return success
                     
             else:
                 # 标签打印（默认）
@@ -704,25 +806,16 @@ class LabelPrintMQTT:
                     if logger:
                         logger.error("ZPL标签打印任务失败")
                 
-        except json.JSONDecodeError as e:
-            error_msg = f"JSON解析失败: {e}"
-            print(f"[ERROR] {error_msg}")
-            if logger:
-                logger.error(f"{error_msg}, 消息内容: {payload_str[:500] if 'payload_str' in locals() else '无法获取'}")
+                return success
+                
         except Exception as e:
-            error_msg = f"处理消息失败: {e}"
+            error_msg = f"处理打印任务失败: {e}"
             print(f"[ERROR] {error_msg}")
             import traceback
             traceback.print_exc()
             if logger:
                 logger.error(error_msg, exc_info=True)
-                # 记录消息内容以便调试
-                if 'msg' in locals():
-                    try:
-                        payload_preview = msg.payload.decode('utf-8', errors='ignore')[:500]
-                        logger.error(f"失败的消息内容预览: {payload_preview}")
-                    except:
-                        logger.error(f"失败的消息原始数据: {msg.payload[:200]}")
+            return False
     
     def on_disconnect(self, client, userdata, rc):
         """断开连接回调"""
