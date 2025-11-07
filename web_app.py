@@ -663,16 +663,20 @@ async def print_file(
                     text_content = file_content.decode('utf-8', errors='replace')
                     print(f"警告: 文件包含无法解码的字符，已替换")
             
-            # 构建打印数据
+            # 构建打印数据（统一格式：format + content）
             # 注意：ESC/POS打印机推荐使用 gb2312 编码以正确显示中文
-            receipt_data = {
-                'raw_text': text_content,
+            print_data = {
+                'print_type': 'receipt',
+                'format': 'raw',
+                'content': text_content,
                 'encoding': 'gb2312'  # 使用gb2312编码避免中文乱码
             }
             
-            success = printer.print_receipt(receipt_data)
-            if not success:
-                error_msg = 'ESC/POS打印失败'
+            # 使用统一的打印队列处理
+            print_queue = get_print_queue()
+            task_id = print_queue.add_task(print_data, printer)
+            print(f"  [OK] 打印任务已加入队列: {task_id}")
+            success = True  # 队列处理是异步的，这里返回True表示任务已成功加入队列
         
         else:
             os.remove(filepath)

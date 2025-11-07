@@ -274,6 +274,51 @@ class LabelPrintMQTT:
             device_path=device_path
         )
     
+    def _convert_to_receipt_data(self, data):
+        """
+        转换数据格式以兼容旧的print_receipt方法
+        支持新格式（format + content）和旧格式（raw_text 或 title/items）
+        
+        Args:
+            data: 原始数据字典
+            
+        Returns:
+            转换后的receipt_data，如果无法转换返回None
+        """
+        # 新格式：format + content
+        if 'format' in data and 'content' in data:
+            data_format = data.get('format', 'structured')
+            content = data.get('content')
+            encoding = data.get('encoding', 'gb2312')
+            
+            if data_format == 'raw':
+                # 原始文本格式
+                return {
+                    'raw_text': content,
+                    'encoding': encoding
+                }
+            elif data_format == 'structured':
+                # 结构化格式，content本身就是receipt_data
+                if isinstance(content, dict):
+                    return content
+                else:
+                    # 如果content不是字典，尝试解析
+                    try:
+                        if isinstance(content, str):
+                            import json
+                            return json.loads(content)
+                        return content
+                    except:
+                        return None
+            else:
+                return None
+        
+        # 旧格式：直接包含raw_text或title/items
+        if 'raw_text' in data or 'title' in data or 'items' in data:
+            return data
+        
+        return None
+    
     def on_connect(self, client, userdata, flags, rc):
         """连接回调"""
         print("\n[回调] on_connect 被触发")
@@ -505,27 +550,55 @@ class LabelPrintMQTT:
                         logger.debug(f"打印机实例: {type(receipt_printer).__name__}")
                         logger.debug(f"打印机配置 - IP: {receipt_printer.printer_ip}, 名称: {receipt_printer.printer_name}, 设备: {receipt_printer.device_path}")
                     
-                    # 验证数据完整性并执行打印
-                    if 'raw_text' not in data and 'title' not in data and 'items' not in data:
-                        error_msg = "ESC/POS数据格式错误：缺少必要字段（需要 raw_text 或 title/items）"
-                        print(f"[ERROR] {error_msg}")
+                    # 使用统一的打印队列处理
+                    try:
+                        from src.utils.print_queue import get_print_queue
+                        print_queue = get_print_queue()
+                        
+                        # 将任务添加到打印队列
+                        task_id = print_queue.add_task(data, receipt_printer)
+                        print(f"  ✓ 打印任务已加入队列: {task_id}")
                         if logger:
-                            logger.error(f"{error_msg}, 数据键: {list(data.keys())}")
-                        success = False
-                    else:
-                        try:
-                            success = receipt_printer.print_receipt(data)
-                            if logger:
-                                if success:
-                                    logger.info("ESC/POS打印成功")
-                                else:
-                                    logger.error("ESC/POS打印失败（返回False）")
-                        except Exception as print_error:
-                            error_msg = f"ESC/POS打印异常: {print_error}"
+                            logger.info(f"打印任务已加入队列: {task_id}")
+                        
+                        # 队列处理是异步的，这里返回True表示任务已成功加入队列
+                        success = True
+                        
+                    except ImportError:
+                        # 如果打印队列不可用，回退到直接打印
+                        print("  ⚠ 警告: 打印队列模块不可用，使用直接打印模式")
+                        if logger:
+                            logger.warning("打印队列模块不可用，使用直接打印模式")
+                        
+                        # 转换数据格式以兼容旧的print_receipt方法
+                        receipt_data = self._convert_to_receipt_data(data)
+                        
+                        if receipt_data is None:
+                            error_msg = "ESC/POS数据格式错误：无法解析数据"
                             print(f"[ERROR] {error_msg}")
                             if logger:
-                                logger.error(error_msg, exc_info=True)
+                                logger.error(f"{error_msg}, 数据键: {list(data.keys())}")
                             success = False
+                        else:
+                            try:
+                                success = receipt_printer.print_receipt(receipt_data)
+                                if logger:
+                                    if success:
+                                        logger.info("ESC/POS打印成功")
+                                    else:
+                                        logger.error("ESC/POS打印失败（返回False）")
+                            except Exception as print_error:
+                                error_msg = f"ESC/POS打印异常: {print_error}"
+                                print(f"[ERROR] {error_msg}")
+                                if logger:
+                                    logger.error(error_msg, exc_info=True)
+                                success = False
+                    except Exception as queue_error:
+                        error_msg = f"加入打印队列失败: {queue_error}"
+                        print(f"[ERROR] {error_msg}")
+                        if logger:
+                            logger.error(error_msg, exc_info=True)
+                        success = False
                 
                 # 打印结果
                 if success:
