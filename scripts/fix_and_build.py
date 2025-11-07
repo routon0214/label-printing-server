@@ -264,6 +264,8 @@ def build_with_ultimate_config(hook_dir):
         cmd.append(f'--add-data=templates{path_sep}templates')
     if os.path.exists('static'):
         cmd.append(f'--add-data=static{path_sep}static')
+    if os.path.exists('data/test_samples'):
+        cmd.append(f'--add-data=data/test_samples{path_sep}data/test_samples')
     
     # Windows 特定
     if system == 'Windows':
@@ -331,6 +333,19 @@ def verify_build():
     templates_dir = os.path.join(dist_dir, 'templates')
     if os.path.exists(templates_dir):
         print(f"  [OK] templates/ 目录")
+    
+    # 检查 test_samples
+    test_samples_dir = os.path.join(dist_dir, 'data', 'test_samples')
+    if os.path.exists(test_samples_dir):
+        print(f"  [OK] data/test_samples/ 目录")
+        # 检查关键文件
+        examples_file = os.path.join(test_samples_dir, 'examples.json')
+        if os.path.exists(examples_file):
+            print(f"  [OK] examples.json")
+        else:
+            print(f"  [WARNING] examples.json 缺失")
+    else:
+        print(f"  [ERROR] data/test_samples/ 目录缺失")
     
     print("\n" + "=" * 70)
     print("验证完成")
