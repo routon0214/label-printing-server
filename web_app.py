@@ -40,6 +40,18 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 sys.path.insert(0, os.path.join(project_root, 'src'))
 
+
+def get_resource_path(relative_path):
+    """获取资源文件的绝对路径（兼容打包后的环境）"""
+    if getattr(sys, 'frozen', False):
+        # 打包后的路径 (PyInstaller)
+        base_path = sys._MEIPASS
+    else:
+        # 开发环境路径
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+
 from src.config import ConfigManager, create_default_config
 from src.core import LabelPrintMQTT
 from src.core.printer import ZebraPrinter
@@ -121,13 +133,20 @@ async def shutdown_event():
     print("停止MQTT客户端...")
     stop_mqtt_client()
 
-# 静态文件和模板
-static_dir = os.path.join(project_root, 'static')
-templates_dir = os.path.join(project_root, 'templates')
+# 静态文件和模板（兼容打包后的环境）
+static_dir = get_resource_path('static')
+templates_dir = get_resource_path('templates')
 
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-templates = Jinja2Templates(directory=templates_dir)
+else:
+    print(f"[WARNING] 静态文件目录不存在: {static_dir}")
+
+if os.path.exists(templates_dir):
+    templates = Jinja2Templates(directory=templates_dir)
+else:
+    print(f"[WARNING] 模板目录不存在: {templates_dir}")
+    templates = None
 
 # 基础认证
 security = HTTPBasic()
@@ -505,6 +524,11 @@ def get_printer_instance(print_type, printer_config=None):
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, username: str = Depends(verify_credentials)):
     """首页（需要认证）"""
+    if templates is None:
+        return HTMLResponse(
+            content="<h1>错误：模板文件未找到</h1><p>请确保 templates 目录存在</p>",
+            status_code=500
+        )
     return templates.TemplateResponse("index.html", {"request": request})
 
 
@@ -1277,11 +1301,11 @@ async def clean_old_logs(username: str = Depends(verify_credentials)):
 async def get_examples(username: str = Depends(verify_credentials)):
     """获取示例数据列表"""
     try:
-        examples_file = 'data/test_samples/examples.json'
+        examples_file = get_resource_path('data/test_samples/examples.json')
         if not os.path.exists(examples_file):
             return JSONResponse(
                 status_code=404,
-                content={"success": False, "error": "示例配置文件不存在"}
+                content={"success": False, "error": f"示例配置文件不存在: {examples_file}"}
             )
         
         with open(examples_file, 'r', encoding='utf-8') as f:
@@ -1306,11 +1330,11 @@ async def get_example_data(example_id: str, username: str = Depends(verify_crede
     """获取指定示例的数据"""
     try:
         # 读取示例配置
-        examples_file = 'data/test_samples/examples.json'
+        examples_file = get_resource_path('data/test_samples/examples.json')
         if not os.path.exists(examples_file):
             return JSONResponse(
                 status_code=404,
-                content={"success": False, "error": "示例配置文件不存在"}
+                content={"success": False, "error": f"示例配置文件不存在: {examples_file}"}
             )
         
         with open(examples_file, 'r', encoding='utf-8') as f:
@@ -1345,11 +1369,11 @@ async def get_example_data(example_id: str, username: str = Depends(verify_crede
                 content={"success": False, "error": "示例未指定数据文件"}
             )
         
-        file_path = os.path.join('data/test_samples', file_name)
+        file_path = get_resource_path(os.path.join('data/test_samples', file_name))
         if not os.path.exists(file_path):
             return JSONResponse(
                 status_code=404,
-                content={"success": False, "error": f"示例文件 '{file_name}' 不存在"}
+                content={"success": False, "error": f"示例文件 '{file_name}' 不存在: {file_path}"}
             )
         
         # 读取文件内容（统一使用JSON格式）

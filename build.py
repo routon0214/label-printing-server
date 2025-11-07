@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-终极打包解决方案
+打包脚本 - 目录模式
 1. 检查并修复 Python 环境
-2. 重新安装关键依赖
+2. 检查并安装依赖（从 requirements.txt）
 3. 创建自定义 PyInstaller hook
-4. 使用最强的打包配置
+4. 使用目录模式打包
+5. 验证打包结果
 """
 
 import os
@@ -32,6 +33,73 @@ def print_section(title):
     print("=" * 70)
 
 
+def get_venv_python():
+    """获取虚拟环境 .venv 的 Python 路径（如果存在）"""
+    venv_path = os.path.join(os.getcwd(), '.venv')
+    
+    if os.path.exists(venv_path):
+        # 根据平台确定 Python 可执行文件路径
+        if sys.platform == 'win32':
+            venv_python = os.path.join(venv_path, 'Scripts', 'python.exe')
+        else:
+            venv_python = os.path.join(venv_path, 'bin', 'python')
+        
+        if os.path.exists(venv_python):
+            return venv_python
+    
+    return None
+
+
+def parse_requirements():
+    """从 requirements.txt 解析依赖"""
+    requirements_file = 'requirements.txt'
+    
+    if not os.path.exists(requirements_file):
+        print(f"[WARNING] 未找到 {requirements_file}，使用默认依赖列表")
+        return []
+    
+    deps = []
+    system = platform.system().lower()
+    
+    with open(requirements_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # 跳过注释和空行
+            if not line or line.startswith('#'):
+                continue
+            
+            # 处理平台特定依赖
+            if ';' in line:
+                parts = line.split(';')
+                dep_line = parts[0].strip()
+                condition = parts[1].strip() if len(parts) > 1 else ''
+                
+                # 检查条件是否匹配当前平台
+                if 'sys_platform' in condition:
+                    if 'win32' in condition and system == 'windows':
+                        deps.append(dep_line)
+                    elif 'linux' in condition and system == 'linux':
+                        deps.append(dep_line)
+                else:
+                    # 无条件限制，添加
+                    deps.append(dep_line)
+            else:
+                # 普通依赖
+                deps.append(line)
+    
+    # 提取包名（去除版本号）
+    package_names = []
+    for dep in deps:
+        # 处理格式如: package>=1.0.0, package[extra]>=1.0.0
+        dep = dep.split('>=')[0].split('==')[0].split('<')[0].split('>')[0].strip()
+        # 处理 extras: package[extra] -> package
+        if '[' in dep:
+            dep = dep.split('[')[0]
+        package_names.append(dep)
+    
+    return package_names
+
+
 def check_python_environment():
     """检查 Python 环境"""
     print_section("步骤 1/5: 检查 Python 环境")
@@ -40,54 +108,117 @@ def check_python_environment():
     print(f"Python 路径: {sys.executable}")
     print(f"平台: {platform.platform()}")
     
+    # 检查是否在虚拟环境中
+    in_venv = hasattr(sys, 'real_prefix') or (
+        hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
+    )
+    
+    # 检测 .venv 目录
+    venv_path = os.path.join(os.getcwd(), '.venv')
+    venv_exists = os.path.exists(venv_path)
+    
+    if in_venv:
+        print(f"✓ 当前在虚拟环境中: {sys.prefix}")
+    else:
+        if venv_exists:
+            print(f"⚠ 检测到 .venv 目录，但当前未激活虚拟环境")
+            print(f"  建议先激活虚拟环境:")
+            if sys.platform == 'win32':
+                print(f"    .venv\\Scripts\\activate")
+            else:
+                print(f"    source .venv/bin/activate")
+            print(f"  或者直接运行此脚本，脚本会使用当前 Python 环境")
+        else:
+            print("当前不在虚拟环境中（使用系统 Python）")
+    
     return True
 
 
 def fix_dependencies():
-    """修复依赖"""
+    """修复依赖 - 从 requirements.txt 读取"""
     print_section("步骤 2/5: 修复依赖")
     
-    # 关键依赖列表
-    critical_deps = [
-        'jinja2',
-        'markupsafe',
-        'fastapi',
-        'starlette',
-        'uvicorn',
-        'paho-mqtt',
-        'pillow',
-    ]
+    # 从 requirements.txt 读取依赖
+    deps = parse_requirements()
     
-    print("检查关键依赖...")
+    if not deps:
+        print("[WARNING] 无法从 requirements.txt 读取依赖，使用默认列表")
+        deps = [
+            'jinja2',
+            'markupsafe',
+            'fastapi',
+            'starlette',
+            'uvicorn',
+            'paho-mqtt',
+            'pillow',
+            'python-multipart',
+            'pyinstaller',
+        ]
+        # 根据平台添加特定依赖
+        if sys.platform == 'win32':
+            deps.append('pywin32')
+        elif sys.platform == 'linux':
+            deps.append('pycups')
+    
+    print(f"从 requirements.txt 读取到 {len(deps)} 个依赖包")
+    print("检查依赖...")
+    
     missing = []
+    installed = []
     
-    for dep in critical_deps:
+    for dep in deps:
+        # 转换为导入名（paho-mqtt -> paho.mqtt, python-multipart -> 不需要导入检查）
+        import_name = dep.replace('-', '_').lower()
+        
+        # 跳过不需要导入检查的包
+        skip_check = ['pyinstaller', 'python-multipart']
+        if any(skip in dep.lower() for skip in skip_check):
+            installed.append(dep)
+            print(f"  [OK] {dep} (跳过导入检查)")
+            continue
+        
         try:
-            __import__(dep.replace('-', '_').lower())
+            # 特殊处理一些包的导入名
+            if dep == 'paho-mqtt':
+                __import__('paho.mqtt')
+            elif dep == 'pywin32':
+                __import__('win32print')
+            elif dep == 'pycups':
+                __import__('cups')
+            else:
+                __import__(import_name)
             print(f"  [OK] {dep}")
+            installed.append(dep)
         except ImportError:
             print(f"  [ERROR] {dep} - 缺失")
             missing.append(dep)
     
     if missing:
-        print(f"\n发现 {len(missing)} 个缺失的依赖，正在安装...")
-        for dep in missing:
-            print(f"\n安装 {dep}...")
-            try:
-                subprocess.check_call([sys.executable, '-m', 'pip', 'install', dep, '--upgrade'])
-                print(f"  [OK] {dep} 安装成功")
-            except subprocess.CalledProcessError as e:
-                print(f"  [ERROR] {dep} 安装失败: {e}")
-                return False
-    
-    # 强制重新安装 Jinja2 和 MarkupSafe（确保完整）
-    print("\n强制重新安装 Jinja2 生态...")
-    try:
-        subprocess.check_call([sys.executable, '-m', 'pip', 'uninstall', 'jinja2', 'markupsafe', '-y'])
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'jinja2', 'markupsafe', '--no-cache-dir'])
-        print("  [OK] Jinja2 和 MarkupSafe 重新安装成功")
-    except subprocess.CalledProcessError as e:
-        print(f"  [WARNING] 重新安装警告: {e}")
+        print(f"\n发现 {len(missing)} 个缺失的依赖，正在从 requirements.txt 安装...")
+        try:
+            # 确定使用的 Python 可执行文件
+            python_exe = sys.executable
+            venv_python = get_venv_python()
+            if venv_python:
+                # 检查是否在虚拟环境中
+                in_venv = hasattr(sys, 'real_prefix') or (
+                    hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
+                )
+                if not in_venv:
+                    python_exe = venv_python
+            
+            # 直接从 requirements.txt 安装所有依赖
+            subprocess.check_call([
+                python_exe, '-m', 'pip', 'install', 
+                '-r', 'requirements.txt',
+                '--upgrade'
+            ])
+            print("  [OK] 所有依赖安装成功")
+        except subprocess.CalledProcessError as e:
+            print(f"  [ERROR] 依赖安装失败: {e}")
+            return False
+    else:
+        print(f"\n所有依赖已安装 ({len(installed)} 个)")
     
     return True
 
@@ -154,11 +285,24 @@ hiddenimports += collect_submodules('starlette')
 
 
 def build_with_ultimate_config(hook_dir):
-    """使用终极配置打包"""
-    print_section("步骤 4/5: 开始打包")
+    """使用目录模式打包"""
+    print_section("步骤 4/5: 开始打包（目录模式）")
     
     system = platform.system()
     path_sep = ';' if system == 'Windows' else ':'
+    
+    # 确定使用的 Python 可执行文件
+    # 优先使用虚拟环境的 Python（如果存在且未激活）
+    python_exe = sys.executable
+    venv_python = get_venv_python()
+    if venv_python and venv_python != sys.executable:
+        # 检查是否在虚拟环境中
+        in_venv = hasattr(sys, 'real_prefix') or (
+            hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
+        )
+        if not in_venv:
+            print(f"使用虚拟环境 Python: {venv_python}")
+            python_exe = venv_python
     
     # 清理
     for dir_name in ['build', 'dist']:
@@ -170,9 +314,9 @@ def build_with_ultimate_config(hook_dir):
         if os.path.exists(spec_file):
             os.remove(spec_file)
     
-    # 终极打包配置
+    # 打包配置 - 目录模式
     cmd = [
-        sys.executable, '-m', 'PyInstaller',
+        python_exe, '-m', 'PyInstaller',
         '--clean',
         '--noconfirm',
         '--onedir',  # 目录模式
@@ -436,13 +580,13 @@ def create_zip_package():
 def main():
     """主函数"""
     print("\n" + "=" * 70)
-    print(" " * 15 + "终极打包解决方案")
+    print(" " * 20 + "打包脚本 - 目录模式")
     print("=" * 70)
     print("\n这个脚本将:")
     print("  1. 检查 Python 环境")
-    print("  2. 修复所有依赖")
+    print("  2. 检查并安装依赖（从 requirements.txt）")
     print("  3. 创建自定义 Hook")
-    print("  4. 使用最强配置打包")
+    print("  4. 使用目录模式打包")
     print("  5. 验证打包结果")
     print()
     
@@ -451,10 +595,9 @@ def main():
         if not check_python_environment():
             return 1
         
-        # 步骤 2: 修复依赖
+        # 步骤 2: 检查并安装依赖
         if not fix_dependencies():
-            print("\n[ERROR] 依赖修复失败")
-            input("\n按回车键退出...")
+            print("\n[ERROR] 依赖安装失败")
             return 1
         
         # 步骤 3: 创建 Hook
@@ -463,7 +606,6 @@ def main():
         # 步骤 4: 打包
         if not build_with_ultimate_config(hook_dir):
             print("\n[ERROR] 打包失败")
-            input("\n按回车键退出...")
             return 1
         
         # 步骤 5: 验证
@@ -499,18 +641,15 @@ def main():
         
         print("=" * 70)
         
-        input("\n按回车键退出...")
         return 0
         
     except KeyboardInterrupt:
         print("\n\n用户取消")
-        input("\n按回车键退出...")
         return 1
     except Exception as e:
         print(f"\n[ERROR] 错误: {e}")
         import traceback
         traceback.print_exc()
-        input("\n按回车键退出...")
         return 1
 
 
