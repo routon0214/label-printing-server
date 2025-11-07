@@ -270,23 +270,29 @@ def get_print_type_from_filename(filename):
 def stop_mqtt_client():
     """停止MQTT客户端"""
     global mqtt_client, mqtt_thread
+    import time
     
     if mqtt_client:
         try:
             # 使用客户端的stop方法正常停止
+            print("正在停止MQTT客户端...")
             mqtt_client.stop()
+            # 等待一下确保断开操作完成
+            time.sleep(0.5)
         except Exception as e:
             print(f"停止MQTT客户端时出错: {e}")
     
     # 等待线程结束
     if mqtt_thread and mqtt_thread.is_alive():
-        import time
         print("等待MQTT线程结束...")
         mqtt_thread.join(timeout=5)
         if mqtt_thread.is_alive():
             print("[WARNING] MQTT线程未能在5秒内停止")
         else:
             print("[OK] MQTT线程已结束")
+    
+    # 额外等待确保资源释放
+    time.sleep(0.5)
     
     mqtt_client = None
     mqtt_thread = None
@@ -295,6 +301,7 @@ def stop_mqtt_client():
 def start_mqtt_client():
     """在后台线程中启动MQTT客户端"""
     global mqtt_client, mqtt_thread, config_manager
+    import time
     
     print("\n" + "="*70)
     print("开始启动MQTT客户端...")
@@ -305,6 +312,8 @@ def start_mqtt_client():
         print("检测到旧的MQTT客户端，正在停止...")
         stop_mqtt_client()
         print("[OK] 旧客户端已停止")
+        # 等待一下确保资源完全释放
+        time.sleep(1)
     
     try:
         # 确保config_manager已初始化
@@ -316,10 +325,10 @@ def start_mqtt_client():
         else:
             print("  [OK] 配置管理器已存在")
         
-        # 加载配置
-        print("  加载配置...")
+        # 重新加载配置（确保使用最新配置）
+        print("  重新加载配置...")
         config = config_manager.load()
-        print(f"  [OK] 配置已加载")
+        print(f"  [OK] 配置已重新加载")
         
         print("\n[步骤2] 解析MQTT配置...")
         mqtt_config = config_manager.get_mqtt_config()
@@ -359,6 +368,9 @@ def start_mqtt_client():
         mqtt_thread.start()
         print(f"  [OK] 后台线程已启动 (线程ID: {mqtt_thread.ident})")
         print(f"  [OK] 线程状态: {'运行中' if mqtt_thread.is_alive() else '已停止'}")
+        
+        # 等待一下确保客户端开始连接
+        time.sleep(0.5)
         
         print("\n" + "="*70)
         print("[OK] MQTT客户端已在后台启动")
@@ -1120,8 +1132,18 @@ async def save_config(
         # 如果修改了MQTT配置，需要重启MQTT客户端
         if mqtt_changed:
             print("检测到MQTT配置已更改，正在重启MQTT客户端...")
-            start_mqtt_client()
-            message = "配置已保存，MQTT客户端已重启"
+            # 在后台线程中重启MQTT客户端，避免阻塞Web响应
+            def restart_mqtt():
+                try:
+                    start_mqtt_client()
+                except Exception as e:
+                    print(f"重启MQTT客户端时出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            restart_thread = threading.Thread(target=restart_mqtt, daemon=True, name="MQTT-Restart-Thread")
+            restart_thread.start()
+            message = "配置已保存，MQTT客户端正在后台重启..."
         else:
             message = "配置已保存"
         
