@@ -1037,8 +1037,6 @@ async def get_config(username: str = Depends(verify_credentials)):
     if config_manager is None:
         config_manager = ConfigManager('config/printer_config.json')
     config = config_manager.load()
-    # 获取MQTT配置（包含自动生成的主题）
-    mqtt_config = config_manager.get_mqtt_config()
     
     # 不返回密码等敏感信息
     safe_config = config.copy()
@@ -1047,9 +1045,19 @@ async def get_config(username: str = Depends(verify_credentials)):
     if 'mqtt' in safe_config and 'password' in safe_config['mqtt']:
         safe_config['mqtt']['password'] = '***'
     
-    # 更新MQTT配置中的topic为自动生成的值
+    # 获取MQTT配置（如果topic为空且设置了platform_code，会自动生成）
+    mqtt_config = config_manager.get_mqtt_config()
+    
+    # 更新MQTT配置中的topic（如果配置中没有topic或为空，使用自动生成的值）
     if 'mqtt' in safe_config:
-        safe_config['mqtt']['topic'] = mqtt_config.get('topic', safe_config['mqtt'].get('topic', 'zebra/print'))
+        # 如果配置中有topic且不为空，使用配置中的topic（用户手动设置的）
+        # 如果配置中没有topic或为空，使用自动生成的主题
+        if safe_config['mqtt'].get('topic') and safe_config['mqtt']['topic'].strip():
+            # 使用配置文件中保存的topic（用户手动设置的）
+            pass  # 保持原值
+        else:
+            # 使用自动生成的主题
+            safe_config['mqtt']['topic'] = mqtt_config.get('topic', 'zebra/print')
     
     return JSONResponse(safe_config)
 

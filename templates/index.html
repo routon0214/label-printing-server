@@ -168,8 +168,8 @@
                             </div>
                             <div class="form-group">
                                 <label for="mqtt-topic">主题:</label>
-                                <input type="text" id="mqtt-topic" name="topic" placeholder="zebra/print" readonly>
-                                <small>如果设置了打印程序号，主题将自动生成（此字段为只读）</small>
+                                <input type="text" id="mqtt-topic" name="topic" placeholder="zebra/print">
+                                <small>如果设置了打印程序号，将自动生成主题，但您也可以手动修改</small>
                             </div>
                             <div class="form-group">
                                 <label for="mqtt-username">用户名:</label>
@@ -593,6 +593,16 @@
                     // 密码字段不填充（显示为***）
                 }
                 
+                // 检查加载的主题是否是自动生成的
+                const platformCode = data.platform_code;
+                const topic = data.mqtt?.topic || '';
+                if (platformCode && topic) {
+                    const expectedAutoTopic = `tpm-iot-protocol/platform/${platformCode}/devicePrintJson`;
+                    if (topic === expectedAutoTopic) {
+                        document.getElementById('mqtt-topic').setAttribute('data-auto-topic', expectedAutoTopic);
+                    }
+                }
+                
                 // 更新主题显示（根据platform_code自动生成）
                 updateTopicDisplay();
             } catch (error) {
@@ -604,17 +614,28 @@
         function updateTopicDisplay() {
             const platformCode = document.getElementById('platform-code').value.trim();
             const topicInput = document.getElementById('mqtt-topic');
+            const currentTopic = topicInput.value.trim();
+            const savedAutoTopic = topicInput.getAttribute('data-auto-topic');
             
             if (platformCode) {
                 // 自动生成主题
                 const autoTopic = `tpm-iot-protocol/platform/${platformCode}/devicePrintJson`;
-                topicInput.value = autoTopic;
-                topicInput.readOnly = true;
-                topicInput.style.backgroundColor = '#f5f5f5';
+                
+                // 如果当前主题为空，或者是之前保存的自动生成主题，则更新为新的自动生成主题
+                if (!currentTopic || currentTopic === savedAutoTopic) {
+                    topicInput.value = autoTopic;
+                    topicInput.setAttribute('data-auto-topic', autoTopic);
+                } else {
+                    // 用户手动修改了主题，保持用户输入的值，但更新data-auto-topic标记
+                    topicInput.setAttribute('data-auto-topic', autoTopic);
+                }
+                
+                // 设置placeholder提示自动生成的主题
+                topicInput.placeholder = `自动生成: ${autoTopic}（可手动修改）`;
             } else {
-                // 允许手动输入主题
-                topicInput.readOnly = false;
-                topicInput.style.backgroundColor = '';
+                // 清除自动生成标记
+                topicInput.removeAttribute('data-auto-topic');
+                topicInput.placeholder = 'zebra/print';
                 // 如果当前没有值，保持原值（从配置中加载的值）
             }
         }

@@ -53,7 +53,7 @@ class ConfigManager:
         """
         获取MQTT配置
         支持URL格式和分离格式，自动解析
-        如果设置了platform_code，会自动生成主题：tpm-iot-protocol/platform/{code}/devicePrintJson
+        如果设置了platform_code且topic为空，会自动生成主题：tpm-iot-protocol/platform/{code}/devicePrintJson
         
         Returns:
             dict: MQTT配置字典，包含host、port、topic、username、password等
@@ -63,20 +63,22 @@ class ConfigManager:
         
         mqtt_config = self.config.get('mqtt', {})
         
-        # 检查是否有platform_code，如果有则自动生成主题
+        # 检查是否有platform_code，如果topic为空则自动生成主题
         platform_code = self.config.get('platform_code')
         if platform_code and platform_code.strip():
-            # 自动生成主题（优先使用自动生成的主题）
-            auto_topic = f"tpm-iot-protocol/platform/{platform_code.strip()}/devicePrintJson"
-            mqtt_config['topic'] = auto_topic
+            # 只有当topic为空或未设置时，才使用自动生成的主题
+            if not mqtt_config.get('topic') or not mqtt_config.get('topic').strip():
+                auto_topic = f"tpm-iot-protocol/platform/{platform_code.strip()}/devicePrintJson"
+                mqtt_config['topic'] = auto_topic
         
         # 如果配置中有url字段，优先使用URL格式
         if 'url' in mqtt_config and mqtt_config['url']:
             result = parse_mqtt_url(mqtt_config['url'], mqtt_config)
-            # 确保自动生成的主题被应用（如果设置了platform_code）
+            # 如果设置了platform_code且topic为空，使用自动生成的主题
             if platform_code and platform_code.strip():
-                auto_topic = f"tpm-iot-protocol/platform/{platform_code.strip()}/devicePrintJson"
-                result['topic'] = auto_topic
+                if not result.get('topic') or not result.get('topic').strip():
+                    auto_topic = f"tpm-iot-protocol/platform/{platform_code.strip()}/devicePrintJson"
+                    result['topic'] = auto_topic
             return result
         
         # 否则使用分离格式（向后兼容）
