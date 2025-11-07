@@ -99,6 +99,10 @@ class ESCPOSPrinter:
             bool: 是否成功
         """
         # 如果包含 raw_text 字段，直接打印原始文本
+        if receipt_data is None:
+            print("[ERROR] receipt_data为空，无法打印")
+            return False
+        
         if 'raw_text' in receipt_data:
             raw_text = receipt_data.get('raw_text', '')
             # 对于中文打印机，推荐使用 gb2312 或 gbk 编码

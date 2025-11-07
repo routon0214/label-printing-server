@@ -272,8 +272,14 @@ class PrintQueue:
                              printer: Any, task_data: Dict) -> bool:
         """执行ESC/POS打印"""
         try:
+            receipt_data = None
+            
             if data_format == 'raw':
                 # 原始文本格式
+                if content is None:
+                    print(f"  [错误] raw格式的content为空")
+                    return False
+                
                 receipt_data = {
                     'raw_text': content,
                     'encoding': task_data.get('encoding', 'gb2312')
@@ -281,10 +287,23 @@ class PrintQueue:
             
             elif data_format == 'structured':
                 # 结构化格式
+                if content is None:
+                    print(f"  [错误] structured格式的content为空")
+                    return False
+                
+                if not isinstance(content, dict):
+                    print(f"  [错误] structured格式的content必须是字典，当前类型: {type(content).__name__}")
+                    return False
+                
                 receipt_data = content
             
             else:
                 print(f"  [错误] 不支持的小票格式: {data_format}")
+                return False
+            
+            # 验证 receipt_data 不为空
+            if receipt_data is None:
+                print(f"  [错误] receipt_data为空，无法打印")
                 return False
             
             # 执行打印

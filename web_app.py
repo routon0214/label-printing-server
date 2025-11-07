@@ -395,8 +395,11 @@ def normalize_print_data(data):
     if not isinstance(data, dict):
         raise ValueError(f"打印数据必须是字典对象，当前类型为: {type(data).__name__}")
     
-    # 如果已经是新格式（包含format和content字段），直接返回
+    # 如果已经是新格式（包含format和content字段），验证后返回
     if 'format' in data and 'content' in data:
+        # 验证content不为None
+        if data.get('content') is None:
+            raise ValueError(f"新格式数据的content字段不能为空 (format: {data.get('format')})")
         return data
     
     print_type = data.get('print_type', 'label')
@@ -412,10 +415,14 @@ def normalize_print_data(data):
     
     elif 'raw_text' in data:
         # 旧格式: raw_text
+        raw_text = data.get('raw_text')
+        if raw_text is None:
+            raise ValueError("raw_text字段不能为空")
+        
         return {
             'print_type': print_type,
             'format': 'raw',
-            'content': data['raw_text'],
+            'content': raw_text,
             'encoding': data.get('encoding', 'gb2312')
         }
     
