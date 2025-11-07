@@ -134,15 +134,37 @@ class ESCPOSPrinter:
             # 5. 添加换行
             commands.extend(self.LF * 2)
             
+            # 验证生成的命令
+            final_commands = bytes(commands)
+            print(f"  生成的ESC/POS命令总长度: {len(final_commands)} 字节")
+            if len(final_commands) < 10:
+                print(f"  ⚠ 警告: 命令长度过短，可能有问题")
+            
             # 发送到打印机
-            return self.send_commands(bytes(commands))
+            result = self.send_commands(final_commands)
+            if result:
+                print(f"  ✓ 打印命令已成功发送")
+            else:
+                print(f"  ✗ 打印命令发送失败")
+            return result
         
         # 否则使用结构化格式
+        print("  使用结构化格式生成小票")
         # 生成ESC/POS指令
         commands = self.generate_receipt_commands(receipt_data)
         
+        # 验证生成的命令
+        print(f"  生成的ESC/POS命令总长度: {len(commands)} 字节")
+        if len(commands) < 10:
+            print(f"  ⚠ 警告: 命令长度过短，可能有问题")
+        
         # 发送到打印机
-        return self.send_commands(commands)
+        result = self.send_commands(commands)
+        if result:
+            print(f"  ✓ 打印命令已成功发送")
+        else:
+            print(f"  ✗ 打印命令发送失败")
+        return result
     
     def generate_receipt_commands(self, data):
         """生成小票ESC/POS指令"""
@@ -235,6 +257,18 @@ class ESCPOSPrinter:
         Returns:
             bool: 是否成功
         """
+        # 验证命令数据
+        if not commands:
+            print("✗ 错误：ESC/POS命令数据为空")
+            return False
+        
+        if len(commands) == 0:
+            print("✗ 错误：ESC/POS命令数据长度为0")
+            return False
+        
+        print(f"  准备发送ESC/POS命令: {len(commands)} 字节")
+        print(f"  命令预览 (前32字节): {commands[:32].hex()}")
+        
         # 优先使用网络打印
         if self.printer_ip:
             return self._send_network(commands)
@@ -247,61 +281,111 @@ class ESCPOSPrinter:
         if self.system == 'Linux' and self.device_path:
             return self._send_device(commands)
         
-        print("错误：未配置打印机")
+        print("✗ 错误：未配置打印机（需要设置 printer_ip、printer_name 或 device_path）")
         return False
     
     def _send_network(self, commands):
         """网络打印（所有平台通用）"""
         try:
+            if not commands or len(commands) == 0:
+                print(f"✗ ESC/POS网络打印失败: 命令数据为空")
+                return False
+            
+            print(f"  准备发送 {len(commands)} 字节到 {self.printer_ip}:{self.printer_port}")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             sock.connect((self.printer_ip, self.printer_port))
-            sock.sendall(commands)
+            
+            # 发送数据
+            sent = sock.sendall(commands)
+            
+            # 等待一小段时间确保数据发送完成
+            import time
+            time.sleep(0.1)
+            
+            # 关闭连接
             sock.close()
-            print(f"✓ ESC/POS网络打印成功: {self.printer_ip}:{self.printer_port}")
+            
+            print(f"✓ ESC/POS网络打印成功: {self.printer_ip}:{self.printer_port} (已发送 {len(commands)} 字节)")
             return True
+        except socket.timeout:
+            print(f"✗ ESC/POS网络打印失败: 连接超时 ({self.printer_ip}:{self.printer_port})")
+            return False
+        except socket.error as e:
+            print(f"✗ ESC/POS网络打印失败: 网络错误 - {e} ({self.printer_ip}:{self.printer_port})")
+            return False
         except Exception as e:
-            print(f"✗ ESC/POS网络打印失败: {e}")
+            print(f"✗ ESC/POS网络打印失败: {e} ({self.printer_ip}:{self.printer_port})")
             return False
     
     def _send_windows(self, commands):
         """Windows打印"""
         try:
+            if not commands or len(commands) == 0:
+                print(f"✗ ESC/POS Windows打印失败: 命令数据为空")
+                return False
+            
             import win32print
             
-            printer_handle = win32print.OpenPrinter(self.printer_name)
-            job_info = ("Receipt Print", None, "RAW")
-            win32print.StartDocPrinter(printer_handle, 1, job_info)
-            win32print.StartPagePrinter(printer_handle)
-            win32print.WritePrinter(printer_handle, commands)
-            win32print.EndPagePrinter(printer_handle)
-            win32print.EndDocPrinter(printer_handle)
-            win32print.ClosePrinter(printer_handle)
+            print(f"  准备发送 {len(commands)} 字节到打印机: {self.printer_name}")
             
-            print(f"✓ ESC/POS Windows打印成功: {self.printer_name}")
-            return True
+            # 检查打印机是否存在
+            try:
+                printer_handle = win32print.OpenPrinter(self.printer_name)
+            except Exception as open_error:
+                print(f"✗ 无法打开打印机 '{self.printer_name}': {open_error}")
+                print(f"  提示: 请检查打印机名称是否正确，或打印机是否在线")
+                return False
+            
+            try:
+                job_info = ("Receipt Print", None, "RAW")
+                job_id = win32print.StartDocPrinter(printer_handle, 1, job_info)
+                print(f"  打印作业已创建 (ID: {job_id})")
+                
+                win32print.StartPagePrinter(printer_handle)
+                bytes_written = win32print.WritePrinter(printer_handle, commands)
+                win32print.EndPagePrinter(printer_handle)
+                win32print.EndDocPrinter(printer_handle)
+                
+                print(f"✓ ESC/POS Windows打印成功: {self.printer_name} (已写入 {bytes_written} 字节)")
+                return True
+            finally:
+                win32print.ClosePrinter(printer_handle)
             
         except ImportError:
             print("错误：需要安装 pywin32: pip install pywin32")
             return False
         except Exception as e:
             print(f"✗ ESC/POS Windows打印失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _send_device(self, commands):
         """Linux设备直连打印"""
         try:
-            with open(self.device_path, 'wb') as device:
-                device.write(commands)
+            if not commands or len(commands) == 0:
+                print(f"✗ ESC/POS设备打印失败: 命令数据为空")
+                return False
             
-            print(f"✓ ESC/POS设备打印成功: {self.device_path}")
+            print(f"  准备发送 {len(commands)} 字节到设备: {self.device_path}")
+            with open(self.device_path, 'wb') as device:
+                bytes_written = device.write(commands)
+                device.flush()  # 确保数据写入
+            
+            print(f"✓ ESC/POS设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
             return True
             
         except PermissionError:
             print(f"✗ 权限不足: {self.device_path}")
             print(f"提示：sudo chmod 666 {self.device_path}")
             return False
+        except FileNotFoundError:
+            print(f"✗ 设备不存在: {self.device_path}")
+            return False
         except Exception as e:
             print(f"✗ ESC/POS设备打印失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
