@@ -381,11 +381,16 @@ class LabelPrintMQTT:
             if print_type == 'pdf':
                 # PDF文档打印
                 print("类型: PDF文档打印")
+                if logger:
+                    logger.info("开始处理PDF打印任务")
                 
                 # 获取对应的打印机（优先专用，找不到用通用）
                 pdf_printer = self._get_printer('pdf')
                 if not pdf_printer:
-                    print("[ERROR] 错误：未配置PDF打印机")
+                    error_msg = "未配置PDF打印机"
+                    print(f"[ERROR] 错误：{error_msg}")
+                    if logger:
+                        logger.error(error_msg)
                     success = False
                 else:
                     # 判断是使用专用还是通用打印机
@@ -398,26 +403,50 @@ class LabelPrintMQTT:
                     printer_name = data.get('printer')
                     
                     if not pdf_data:
-                        print("[ERROR] 错误：缺少PDF数据")
+                        error_msg = "缺少PDF数据"
+                        print(f"[ERROR] 错误：{error_msg}")
+                        if logger:
+                            logger.error(error_msg)
                         success = False
                     else:
-                        success = pdf_printer.print_pdf(pdf_data, printer_name)
+                        try:
+                            success = pdf_printer.print_pdf(pdf_data, printer_name)
+                            if logger:
+                                if success:
+                                    logger.info("PDF打印成功")
+                                else:
+                                    logger.error("PDF打印失败（返回False）")
+                        except Exception as print_error:
+                            error_msg = f"PDF打印异常: {print_error}"
+                            print(f"[ERROR] {error_msg}")
+                            if logger:
+                                logger.error(error_msg, exc_info=True)
+                            success = False
                 
                 # PDF打印结果
                 if success:
                     print(f"{'='*60}\n")
+                    if logger:
+                        logger.info("PDF打印任务完成")
                 else:
                     print("[ERROR] PDF打印失败")
                     print(f"{'='*60}\n")
+                    if logger:
+                        logger.error("PDF打印任务失败")
             
             elif print_type == 'receipt' or print_type == 'escpos':
                 # ESC/POS小票打印
                 print("类型: ESC/POS小票打印")
+                if logger:
+                    logger.info("开始处理ESC/POS小票打印任务")
                 
                 # 获取对应的打印机（优先专用，找不到用通用）
                 receipt_printer = self._get_printer('receipt')
                 if not receipt_printer:
-                    print("[ERROR] 错误：未配置ESC/POS打印机")
+                    error_msg = "未配置ESC/POS打印机"
+                    print(f"[ERROR] 错误：{error_msg}")
+                    if logger:
+                        logger.error(error_msg)
                     success = False
                 else:
                     # 判断是使用专用还是通用打印机
@@ -432,23 +461,44 @@ class LabelPrintMQTT:
                     else:
                         print("  格式: 结构化小票")
                     
-                    success = receipt_printer.print_receipt(data)
+                    try:
+                        success = receipt_printer.print_receipt(data)
+                        if logger:
+                            if success:
+                                logger.info("ESC/POS打印成功")
+                            else:
+                                logger.error("ESC/POS打印失败（返回False）")
+                    except Exception as print_error:
+                        error_msg = f"ESC/POS打印异常: {print_error}"
+                        print(f"[ERROR] {error_msg}")
+                        if logger:
+                            logger.error(error_msg, exc_info=True)
+                        success = False
                 
                 # 打印结果
                 if success:
                     print(f"{'='*60}\n")
+                    if logger:
+                        logger.info("ESC/POS打印任务完成")
                 else:
                     print("[ERROR] ESC/POS打印失败")
                     print(f"{'='*60}\n")
+                    if logger:
+                        logger.error("ESC/POS打印任务失败")
                     
             else:
                 # 标签打印（默认）
                 print("类型: ZPL标签打印")
+                if logger:
+                    logger.info("开始处理ZPL标签打印任务")
                 
                 # 获取对应的打印机（优先专用，找不到用通用）
                 label_printer = self._get_printer('label')
                 if not label_printer:
-                    print("[ERROR] 错误：未配置标签打印机")
+                    error_msg = "未配置标签打印机"
+                    print(f"[ERROR] 错误：{error_msg}")
+                    if logger:
+                        logger.error(error_msg)
                     success = False
                 else:
                     # 判断是使用专用还是通用打印机
@@ -458,41 +508,96 @@ class LabelPrintMQTT:
                         print("  使用: 通用打印机（备选）")
                     
                     # 获取ZPL代码：支持直接发送或自动生成
-                    if 'zpl_code' in data:
-                        # 直接使用提供的ZPL代码
-                        zpl_code = data.get('zpl_code')
-                        print("  ZPL来源: 直接提供")
-                    else:
-                        # 根据数据自动生成ZPL代码
-                        zpl_code = self.zpl_generator.generate_label_zpl(data)
-                        print("  ZPL来源: 自动生成")
-                    
-                    # 打印
-                    success = label_printer.print_label(zpl_code)
+                    try:
+                        if 'zpl_code' in data:
+                            # 直接使用提供的ZPL代码
+                            zpl_code = data.get('zpl_code')
+                            print("  ZPL来源: 直接提供")
+                            if logger:
+                                logger.debug(f"使用直接提供的ZPL代码，长度: {len(zpl_code) if zpl_code else 0}")
+                        else:
+                            # 根据数据自动生成ZPL代码
+                            zpl_code = self.zpl_generator.generate_label_zpl(data)
+                            print("  ZPL来源: 自动生成")
+                            if logger:
+                                logger.debug(f"自动生成ZPL代码，长度: {len(zpl_code) if zpl_code else 0}")
+                        
+                        if not zpl_code:
+                            error_msg = "ZPL代码为空"
+                            print(f"[ERROR] {error_msg}")
+                            if logger:
+                                logger.error(error_msg)
+                            success = False
+                        else:
+                            # 打印
+                            try:
+                                success = label_printer.print_label(zpl_code)
+                                if logger:
+                                    if success:
+                                        logger.info("ZPL标签打印成功")
+                                    else:
+                                        logger.error("ZPL标签打印失败（返回False）")
+                            except Exception as print_error:
+                                error_msg = f"ZPL标签打印异常: {print_error}"
+                                print(f"[ERROR] {error_msg}")
+                                if logger:
+                                    logger.error(error_msg, exc_info=True)
+                                success = False
+                    except Exception as zpl_error:
+                        error_msg = f"ZPL代码生成/获取异常: {zpl_error}"
+                        print(f"[ERROR] {error_msg}")
+                        if logger:
+                            logger.error(error_msg, exc_info=True)
+                        success = False
+                        zpl_code = None
                 
                 # 标签打印结果
                 if success:
                     print(f"{'='*60}\n")
+                    if logger:
+                        logger.info("ZPL标签打印任务完成")
                 else:
                     # 保存失败的ZPL到文件
-                    try:
-                        import os
-                        os.makedirs('data/failed_labels', exist_ok=True)
-                        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"data/failed_labels/failed_label_{timestamp}.zpl"
-                        with open(filename, 'w', encoding='utf-8') as f:
-                            f.write(zpl_code)
-                        print(f"ZPL已保存到: {filename}")
-                    except Exception as save_error:
-                        print(f"警告：无法保存失败的ZPL: {save_error}")
+                    if zpl_code:
+                        try:
+                            import os
+                            os.makedirs('data/failed_labels', exist_ok=True)
+                            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            filename = f"data/failed_labels/failed_label_{timestamp}.zpl"
+                            with open(filename, 'w', encoding='utf-8') as f:
+                                f.write(zpl_code)
+                            print(f"ZPL已保存到: {filename}")
+                            if logger:
+                                logger.info(f"失败的ZPL已保存到: {filename}")
+                        except Exception as save_error:
+                            error_msg = f"无法保存失败的ZPL: {save_error}"
+                            print(f"[WARNING] {error_msg}")
+                            if logger:
+                                logger.warning(error_msg)
+                    print("[ERROR] ZPL标签打印失败")
                     print(f"{'='*60}\n")
+                    if logger:
+                        logger.error("ZPL标签打印任务失败")
                 
         except json.JSONDecodeError as e:
-            print(f"[ERROR] JSON解析失败: {e}")
+            error_msg = f"JSON解析失败: {e}"
+            print(f"[ERROR] {error_msg}")
+            if logger:
+                logger.error(f"{error_msg}, 消息内容: {payload_str[:500] if 'payload_str' in locals() else '无法获取'}")
         except Exception as e:
-            print(f"[ERROR] 处理消息失败: {e}")
+            error_msg = f"处理消息失败: {e}"
+            print(f"[ERROR] {error_msg}")
             import traceback
             traceback.print_exc()
+            if logger:
+                logger.error(error_msg, exc_info=True)
+                # 记录消息内容以便调试
+                if 'msg' in locals():
+                    try:
+                        payload_preview = msg.payload.decode('utf-8', errors='ignore')[:500]
+                        logger.error(f"失败的消息内容预览: {payload_preview}")
+                    except:
+                        logger.error(f"失败的消息原始数据: {msg.payload[:200]}")
     
     def on_disconnect(self, client, userdata, rc):
         """断开连接回调"""
