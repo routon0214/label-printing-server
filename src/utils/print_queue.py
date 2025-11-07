@@ -113,16 +113,21 @@ class PrintQueue:
         将打印数据标准化为统一格式（新格式）
         
         如果数据已经是新格式，直接返回；否则转换为新格式。
+        兼容字段名：printType (驼峰) 和 print_type (下划线)
         
         Args:
             data: 打印数据字典（应该是新格式，但兼容旧格式）
             
         Returns:
-            标准化后的数据字典（统一新格式）
+            标准化后的数据字典（统一新格式，统一使用下划线命名）
         """
         # 确保输入是字典类型
         if not isinstance(data, dict):
             raise ValueError(f"打印数据必须是字典对象，当前类型为: {type(data).__name__}")
+        
+        # 统一字段名：将 printType 转换为 print_type
+        if 'printType' in data and 'print_type' not in data:
+            data['print_type'] = data.pop('printType')
         
         # 如果已经是新格式（包含format和content字段），验证后直接返回
         if 'format' in data and 'content' in data:
@@ -160,7 +165,7 @@ class PrintQueue:
             content = {}
             # 复制所有字段到content（除了print_type）
             for key, value in data.items():
-                if key != 'print_type':
+                if key != 'print_type' and key != 'printType':
                     content[key] = value
             
             return {
@@ -172,7 +177,7 @@ class PrintQueue:
         # 无法识别的格式，尝试作为结构化数据处理
         content = {}
         for key, value in data.items():
-            if key != 'print_type':
+            if key != 'print_type' and key != 'printType':
                 content[key] = value
         
         return {

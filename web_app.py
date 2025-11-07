@@ -385,6 +385,8 @@ def normalize_print_data(data):
     - raw_text → format: "raw", content: raw_text
     - fields → format: "structured", content: {fields, ...}
     
+    兼容字段名：printType (驼峰) 和 print_type (下划线)
+    
     Args:
         data: 打印数据字典
         
@@ -394,6 +396,10 @@ def normalize_print_data(data):
     # 确保输入是字典类型
     if not isinstance(data, dict):
         raise ValueError(f"打印数据必须是字典对象，当前类型为: {type(data).__name__}")
+    
+    # 统一字段名：将 printType 转换为 print_type
+    if 'printType' in data and 'print_type' not in data:
+        data['print_type'] = data.pop('printType')
     
     # 如果已经是新格式（包含format和content字段），验证后返回
     if 'format' in data and 'content' in data:
@@ -431,7 +437,7 @@ def normalize_print_data(data):
         content = {}
         # 复制所有字段到content（除了print_type）
         for key, value in data.items():
-            if key != 'print_type':
+            if key != 'print_type' and key != 'printType':
                 content[key] = value
         
         return {
