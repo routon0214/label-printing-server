@@ -15,38 +15,5 @@
       "说明": "建议修改默认密码以确保安全"
     }
   },
-  "printers": [
-    {
-      "name": "ZT411",
-      "types": [
-        "label"
-      ],
-      "ip": null,
-      "port": 9100,
-      "device": null,
-      "default": false,
-      "_comment": "斑马标签打印机 ZDesigner ZT411-300dpi ZPL - 处理ZPL标签"
-    },
-    {
-      "name": "Deli",
-      "types": [
-        "receipt", "escpos"
-      ],
-      "ip": null,
-      "port": 9100,
-      "device": null,
-      "default": false,
-      "_comment": "得力打印机 DL-888T - ESC/POS小票打印"
-    },
-    {
-      "name": "KONICA MINOLTA Universal PCL",
-      "types": [
-        "pdf"
-      ],
-      "ip": null,
-      "port": 9100,
-      "device": null,
-      "default": true
-    }
-  ]
+  "printers": []
 }

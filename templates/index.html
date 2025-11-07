@@ -99,6 +99,10 @@
                                 <span class="btn-text">📤 发送打印</span>
                                 <span class="btn-loading" style="display: none;">处理中...</span>
                             </button>
+                            <button type="button" id="mqtt-send-btn" class="btn btn-success" style="margin-left: 10px;">
+                                <span class="btn-text">☁️ 发送到云端</span>
+                                <span class="btn-loading" style="display: none;">发送中...</span>
+                            </button>
                         </div>
                     </form>
                     <div id="json-result" class="result-message" style="display: none;"></div>
@@ -1002,6 +1006,50 @@
                     showResult(resultDiv, data.message || '打印任务已发送', 'success');
                 } else {
                     showResult(resultDiv, data.error || '打印失败', 'error');
+                }
+            } catch (error) {
+                showResult(resultDiv, '请求失败: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.querySelector('.btn-text').style.display = 'inline';
+                btn.querySelector('.btn-loading').style.display = 'none';
+            }
+        });
+
+        // 发送到云端（MQTT）
+        document.getElementById('mqtt-send-btn').addEventListener('click', async () => {
+            const jsonInput = document.getElementById('json-input');
+            const btn = document.getElementById('mqtt-send-btn');
+            const resultDiv = document.getElementById('json-result');
+            
+            let jsonData;
+            try {
+                jsonData = JSON.parse(jsonInput.value);
+            } catch (error) {
+                showResult(resultDiv, 'JSON格式错误: ' + error.message, 'error');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.querySelector('.btn-text').style.display = 'none';
+            btn.querySelector('.btn-loading').style.display = 'inline';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/mqtt/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(jsonData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showResult(resultDiv, '☁️ ' + (data.message || '数据已发送到云端MQTT服务器'), 'success');
+                } else {
+                    showResult(resultDiv, data.error || '发送失败', 'error');
                 }
             } catch (error) {
                 showResult(resultDiv, '请求失败: ' + error.message, 'error');

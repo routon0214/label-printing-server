@@ -559,6 +559,42 @@ class LabelPrintMQTT:
     def on_log(self, client, userdata, level, buf):
         """日志回调（用于调试）"""
         # paho-mqtt的日志级别: DEBUG=1, INFO=2, NOTICE=3, WARNING=4, ERROR=5
+        # 注意：paho-mqtt会将正常的协议消息（如Received PUBLISH）也标记为ERROR级别
+        # 需要过滤这些正常的协议消息，避免误报错误
+        
+        # 检查是否是正常的协议消息（不应该记录为错误）
+        normal_protocol_messages = [
+            'Received PUBLISH',
+            'Sending PUBLISH',
+            'Received PUBACK',
+            'Sending PUBACK',
+            'Received PUBREC',
+            'Sending PUBREC',
+            'Received PUBREL',
+            'Sending PUBREL',
+            'Received PUBCOMP',
+            'Sending PUBCOMP',
+            'Received SUBACK',
+            'Sending SUBSCRIBE',
+            'Received UNSUBACK',
+            'Sending UNSUBSCRIBE',
+            'Received PINGRESP',
+            'Sending PINGREQ',
+            'Received CONNACK',
+            'Sending CONNECT',
+            'Received DISCONNECT',
+            'Sending DISCONNECT'
+        ]
+        
+        is_normal_protocol_msg = any(msg in buf for msg in normal_protocol_messages)
+        
+        # 如果是正常的协议消息，即使level>=5也降级为DEBUG
+        if is_normal_protocol_msg and level >= 5:
+            # 正常的协议消息，降级为DEBUG级别
+            if logger:
+                logger.debug(f"MQTT协议消息: {buf}")
+            return  # 不输出到控制台，也不记录为错误
+        
         # 控制台输出（只输出重要信息）
         if level >= 4:  # WARNING及以上才输出到控制台
             print(f"[MQTT-{level}] {buf}")
@@ -573,7 +609,7 @@ class LabelPrintMQTT:
                 logger.info(f"MQTT通知: {buf}")
             elif level == 4:  # WARNING
                 logger.warning(f"MQTT警告: {buf}")
-            elif level >= 5:  # ERROR
+            elif level >= 5:  # ERROR（真正的错误，不是正常协议消息）
                 logger.error(f"MQTT错误: {buf}")
     
     def start(self):

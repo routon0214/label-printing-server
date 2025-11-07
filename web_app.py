@@ -14,6 +14,7 @@ import base64
 import tempfile
 import json
 import datetime
+import time
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -1363,6 +1364,158 @@ async def get_example_data(example_id: str, username: str = Depends(verify_crede
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": f'获取示例数据失败: {str(e)}'}
+        )
+
+
+@app.post("/api/mqtt/send")
+async def send_mqtt_message(
+    request: Request,
+    username: str = Depends(verify_credentials)
+):
+    """通过MQTT发送打印数据到云端"""
+    global config_manager
+    
+    try:
+        # 获取JSON数据
+        data = await request.json()
+        if not data:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的JSON数据"}
+            )
+        
+        # 确保config_manager已初始化
+        if config_manager is None:
+            config_manager = ConfigManager('config/printer_config.json')
+        
+        # 获取MQTT配置
+        mqtt_config = config_manager.get_mqtt_config()
+        broker_host = mqtt_config.get('host', '127.0.0.1')
+        broker_port = mqtt_config.get('port', 1883)
+        topic = mqtt_config.get('topic', 'zebra/print')
+        mqtt_username = mqtt_config.get('username')
+        mqtt_password = mqtt_config.get('password')
+        protocol = mqtt_config.get('protocol', 'mqtt')
+        url = mqtt_config.get('url')
+        
+        # 检查是否安装了paho-mqtt
+        try:
+            import paho.mqtt.client as mqtt
+        except ImportError:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": "需要安装 paho-mqtt 库: pip install paho-mqtt"}
+            )
+        
+        # 创建MQTT客户端（用于发送，不是接收）
+        client_id = f"web_sender_{int(time.time())}"
+        client = mqtt.Client(client_id=client_id)
+        
+        # 设置认证
+        if mqtt_username and mqtt_password:
+            client.username_pw_set(mqtt_username, mqtt_password)
+        
+        # 处理WebSocket协议
+        if protocol in ['ws', 'wss']:
+            transport = "websockets"
+            client = mqtt.Client(client_id=client_id, transport=transport)
+            if mqtt_username and mqtt_password:
+                client.username_pw_set(mqtt_username, mqtt_password)
+            
+            # 设置WebSocket路径
+            ws_path = '/mqtt'
+            if url:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(url)
+                    if parsed.path:
+                        ws_path = parsed.path
+                except:
+                    pass
+            client.ws_set_options(path=ws_path)
+        
+        # 处理SSL/TLS
+        if protocol in ['wss', 'mqtts']:
+            try:
+                client.tls_set()
+            except:
+                try:
+                    import ssl
+                    client.tls_set(cert_reqs=ssl.CERT_NONE)
+                except:
+                    pass
+        
+        # 连接MQTT服务器
+        try:
+            client.connect(broker_host, broker_port, 60)
+            client.loop_start()
+            
+            # 等待连接建立
+            timeout = 5
+            start_time = time.time()
+            while not client.is_connected() and (time.time() - start_time) < timeout:
+                time.sleep(0.1)
+            
+            if not client.is_connected():
+                client.loop_stop()
+                client.disconnect()
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "error": f"无法连接到MQTT服务器 {broker_host}:{broker_port}"}
+                )
+            
+            # 发送消息
+            message_json = json.dumps(data, ensure_ascii=False)
+            result = client.publish(topic, message_json, qos=0)
+            
+            # 等待消息发送完成
+            result.wait_for_publish(timeout=2)
+            
+            # 断开连接
+            client.loop_stop()
+            client.disconnect()
+            
+            if result.rc == 0:
+                print(f"\n[MQTT发送] 成功发送到 {broker_host}:{broker_port}/{topic}")
+                print(f"  消息长度: {len(message_json)} 字节")
+                return JSONResponse({
+                    "success": True,
+                    "message": f"数据已成功发送到MQTT服务器",
+                    "mqtt_info": {
+                        "host": broker_host,
+                        "port": broker_port,
+                        "topic": topic,
+                        "message_id": result.mid
+                    }
+                })
+            else:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "error": f"MQTT发送失败，错误码: {result.rc}"}
+                )
+        
+        except Exception as conn_error:
+            try:
+                client.loop_stop()
+                client.disconnect()
+            except:
+                pass
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": f"MQTT连接失败: {str(conn_error)}"}
+            )
+    
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "JSON格式错误"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'处理请求时出错: {str(e)}'}
         )
 
 
