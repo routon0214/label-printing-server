@@ -284,12 +284,55 @@ hiddenimports += collect_submodules('starlette')
     return hook_dir
 
 
+def get_platform_info():
+    """获取平台信息"""
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    
+    # 规范化系统名称
+    if system == 'windows':
+        system_name = 'windows'
+        platform_suffix = 'windows'
+    elif system == 'linux':
+        system_name = 'linux'
+        # 检测架构
+        if 'aarch64' in machine or 'arm64' in machine:
+            platform_suffix = 'linux-arm64'
+        elif 'x86_64' in machine or 'amd64' in machine:
+            platform_suffix = 'linux-amd64'
+        else:
+            platform_suffix = f'linux-{machine}'
+    elif system == 'darwin':
+        system_name = 'macos'
+        if 'arm64' in machine:
+            platform_suffix = 'macos-arm64'
+        else:
+            platform_suffix = 'macos-amd64'
+    else:
+        system_name = system
+        platform_suffix = f'{system}-{machine}'
+    
+    return {
+        'system': system_name,
+        'machine': machine,
+        'platform_suffix': platform_suffix,
+        'is_windows': system_name == 'windows',
+        'is_linux': system_name == 'linux',
+        'is_macos': system_name == 'macos'
+    }
+
+
 def build_with_ultimate_config(hook_dir):
     """使用目录模式打包"""
     print_section("步骤 4/5: 开始打包（目录模式）")
     
+    platform_info = get_platform_info()
     system = platform.system()
-    path_sep = ';' if system == 'Windows' else ':'
+    path_sep = ';' if platform_info['is_windows'] else ':'
+    
+    print(f"目标平台: {platform_info['platform_suffix']}")
+    print(f"系统: {system}")
+    print(f"架构: {platform_info['machine']}")
     
     # 确定使用的 Python 可执行文件
     # 优先使用虚拟环境的 Python（如果存在且未激活）
@@ -411,12 +454,24 @@ def build_with_ultimate_config(hook_dir):
         cmd.append(f'--add-data=static{path_sep}static')
     # data/test_samples 不打包到 _internal，稍后手动复制到根目录（用户可修改）
     
-    # Windows 特定
-    if system == 'Windows':
+    # 平台特定配置
+    if platform_info['is_windows']:
+        # Windows 特定
         cmd.extend([
             '--hidden-import=win32print',
             '--hidden-import=win32ui',
             '--hidden-import=win32con',
+        ])
+    elif platform_info['is_linux']:
+        # Linux 特定
+        cmd.extend([
+            '--hidden-import=cups',
+        ])
+        print(f"  [INFO] Linux 架构: {platform_info['machine']}")
+    elif platform_info['is_macos']:
+        # macOS 特定
+        cmd.extend([
+            '--hidden-import=cups',
         ])
     
     cmd.append('app.py')
@@ -474,6 +529,7 @@ def verify_build():
     """验证打包结果"""
     print_section("步骤 5/5: 验证打包结果")
     
+    platform_info = get_platform_info()
     dist_dir = 'dist/label-printing-server'
     
     if not os.path.exists(dist_dir):
@@ -481,9 +537,9 @@ def verify_build():
         return False
     
     # 检查关键文件
-    print("\n检查关键文件:")
+    print(f"\n检查关键文件 ({platform_info['platform_suffix']}):")
     
-    exe_name = 'label-printing-server.exe' if platform.system() == 'Windows' else 'label-printing-server'
+    exe_name = 'label-printing-server.exe' if platform_info['is_windows'] else 'label-printing-server'
     exe_path = os.path.join(dist_dir, exe_name)
     
     if os.path.exists(exe_path):
@@ -577,19 +633,19 @@ def create_zip_package():
     """将打包好的程序压缩成zip文件"""
     print_section("创建ZIP压缩包")
     
+    platform_info = get_platform_info()
     dist_dir = 'dist/label-printing-server'
     
     if not os.path.exists(dist_dir):
         print("[ERROR] 找不到打包目录，无法创建ZIP")
         return False
     
-    # 生成带时间戳的zip文件名
+    # 生成带时间戳和平台信息的zip文件名
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    system_name = platform.system().lower()
-    zip_filename = f'dist/label-printing-server_{system_name}_{timestamp}.zip'
+    zip_filename = f'dist/label-printing-server_{platform_info["platform_suffix"]}_{timestamp}.zip'
     
     # 也创建一个不带时间戳的版本（覆盖旧版本）
-    zip_filename_simple = f'dist/label-printing-server.zip'
+    zip_filename_simple = f'dist/label-printing-server_{platform_info["platform_suffix"]}.zip'
     
     print(f"\n正在压缩 {dist_dir} ...")
     
@@ -688,10 +744,18 @@ def main():
         print("     http://127.0.0.1:5000")
         
         if zip_created:
+            platform_info = get_platform_info()
             print("\n  4. 部署ZIP包:")
-            print("     dist/label-printing-server.zip")
+            print(f"     dist/label-printing-server_{platform_info['platform_suffix']}.zip")
         
         print("=" * 70)
+        
+        # 显示支持的平台信息
+        print("\n支持的平台:")
+        print("  • Windows (AMD64)")
+        print("  • Linux (AMD64)")
+        print("  • Linux (ARM64)")
+        print("  当前编译平台: " + platform_info['platform_suffix'])
         
         return 0
         
