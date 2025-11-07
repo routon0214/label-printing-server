@@ -157,13 +157,19 @@
                     <div id="mqtt-config" class="sub-tab-content active">
                         <form id="mqtt-config-form">
                             <div class="form-group">
+                                <label for="platform-code">打印程序号:</label>
+                                <input type="text" id="platform-code" name="platform_code" placeholder="例如: ABC123">
+                                <small>设置后，MQTT主题将自动生成为: tpm-iot-protocol/platform/{程序号}/devicePrintJson</small>
+                            </div>
+                            <div class="form-group">
                                 <label for="mqtt-url">MQTT URL:</label>
                                 <input type="text" id="mqtt-url" name="url" placeholder="mqtt://127.0.0.1:1883">
                                 <small>格式: mqtt://host:port 或 ws://host:port/mqtt</small>
                             </div>
                             <div class="form-group">
                                 <label for="mqtt-topic">主题:</label>
-                                <input type="text" id="mqtt-topic" name="topic" placeholder="zebra/print">
+                                <input type="text" id="mqtt-topic" name="topic" placeholder="zebra/print" readonly>
+                                <small>如果设置了打印程序号，主题将自动生成（此字段为只读）</small>
                             </div>
                             <div class="form-group">
                                 <label for="mqtt-username">用户名:</label>
@@ -575,6 +581,9 @@
                 const response = await fetch('/api/config');
                 const data = await response.json();
                 
+                // 填充打印程序号
+                document.getElementById('platform-code').value = data.platform_code || '';
+                
                 // 填充MQTT配置表单
                 if (data.mqtt) {
                     document.getElementById('mqtt-url').value = data.mqtt.url || '';
@@ -583,8 +592,30 @@
                     document.getElementById('mqtt-client-id').value = data.mqtt.client_id || '';
                     // 密码字段不填充（显示为***）
                 }
+                
+                // 更新主题显示（根据platform_code自动生成）
+                updateTopicDisplay();
             } catch (error) {
                 console.error('加载配置失败:', error);
+            }
+        }
+        
+        // 更新主题显示
+        function updateTopicDisplay() {
+            const platformCode = document.getElementById('platform-code').value.trim();
+            const topicInput = document.getElementById('mqtt-topic');
+            
+            if (platformCode) {
+                // 自动生成主题
+                const autoTopic = `tpm-iot-protocol/platform/${platformCode}/devicePrintJson`;
+                topicInput.value = autoTopic;
+                topicInput.readOnly = true;
+                topicInput.style.backgroundColor = '#f5f5f5';
+            } else {
+                // 允许手动输入主题
+                topicInput.readOnly = false;
+                topicInput.style.backgroundColor = '';
+                // 如果当前没有值，保持原值（从配置中加载的值）
             }
         }
 
@@ -896,6 +927,10 @@
             try {
                 const response = await fetch('/api/config');
                 const config = await response.json();
+                
+                // 更新打印程序号
+                const platformCodeValue = document.getElementById('platform-code').value.trim();
+                config.platform_code = platformCodeValue || null;
                 
                 // 更新MQTT配置
                 const clientIdValue = document.getElementById('mqtt-client-id').value.trim();
@@ -1522,6 +1557,9 @@
             setInterval(checkStatus, 5000);
             loadConfig();
             loadExamplesList();  // 加载示例列表
+            
+            // 监听打印程序号输入变化，自动更新主题显示
+            document.getElementById('platform-code').addEventListener('input', updateTopicDisplay);
         });
     </script>
 </body>

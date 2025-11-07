@@ -1,4 +1,5 @@
 {
+  "platform_code": null,
   "mqtt": {
     "url": "tcp://10.100.10.121:1883",
     "topic": "zebra/print",

@@ -1,4 +1,5 @@
 {
+  "platform_code": null,
   "mqtt": {
     "url": "mqtt://127.0.0.1:1883",
     "topic": "zebra/print",
@@ -7,8 +8,9 @@
     "client_id": null,
     "_comment": {
       "url": "MQTT连接URL，格式: protocol://host:port（不包含topic）",
-      "topic": "MQTT订阅主题，独立配置",
+      "topic": "MQTT订阅主题，独立配置。如果设置了platform_code，主题将自动生成为: tpm-iot-protocol/platform/{platform_code}/devicePrintJson",
       "client_id": "MQTT客户端ID，如果为null则自动生成随机ID（格式：label_print_随机字符串）",
+      "platform_code": "打印程序号，设置后MQTT主题将自动生成",
       "示例URL": [
         "mqtt://127.0.0.1:1883",
         "ws://10.100.10.121:8083/mqtt",

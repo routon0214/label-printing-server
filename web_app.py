@@ -1037,12 +1037,20 @@ async def get_config(username: str = Depends(verify_credentials)):
     if config_manager is None:
         config_manager = ConfigManager('config/printer_config.json')
     config = config_manager.load()
+    # 获取MQTT配置（包含自动生成的主题）
+    mqtt_config = config_manager.get_mqtt_config()
+    
     # 不返回密码等敏感信息
     safe_config = config.copy()
     if 'web' in safe_config and 'password' in safe_config['web']:
         safe_config['web']['password'] = '***'
     if 'mqtt' in safe_config and 'password' in safe_config['mqtt']:
         safe_config['mqtt']['password'] = '***'
+    
+    # 更新MQTT配置中的topic为自动生成的值
+    if 'mqtt' in safe_config:
+        safe_config['mqtt']['topic'] = mqtt_config.get('topic', safe_config['mqtt'].get('topic', 'zebra/print'))
+    
     return JSONResponse(safe_config)
 
 
@@ -1060,6 +1068,7 @@ async def save_config(
         # 保存旧的MQTT配置用于比较
         old_config = config_manager.load()
         old_mqtt_config = config_manager.get_mqtt_config()
+        old_platform_code = old_config.get('platform_code')
         
         data = await request.json()
         if not data:
@@ -1087,15 +1096,17 @@ async def save_config(
         # 重新加载配置
         config_manager = ConfigManager(config_file)
         new_mqtt_config = config_manager.get_mqtt_config()
+        new_platform_code = data.get('platform_code')
         
-        # 检查MQTT配置是否改变
+        # 检查MQTT配置是否改变（包括platform_code改变导致的topic变化）
         mqtt_changed = False
         if old_mqtt_config.get('url') != new_mqtt_config.get('url') or \
            old_mqtt_config.get('host') != new_mqtt_config.get('host') or \
            old_mqtt_config.get('port') != new_mqtt_config.get('port') or \
            old_mqtt_config.get('topic') != new_mqtt_config.get('topic') or \
            old_mqtt_config.get('username') != new_mqtt_config.get('username') or \
-           old_mqtt_config.get('password') != new_mqtt_config.get('password'):
+           old_mqtt_config.get('password') != new_mqtt_config.get('password') or \
+           old_platform_code != new_platform_code:
             mqtt_changed = True
         
         # 如果修改了MQTT配置，需要重启MQTT客户端
