@@ -55,6 +55,21 @@ class ESCPOSPrinter:
         self.printer_port = printer_port
         self.printer_name = printer_name
         self.device_path = device_path
+        
+        # 验证配置
+        has_config = bool(printer_ip or printer_name or device_path)
+        if not has_config:
+            print(f"⚠ 警告: ESC/POS打印机配置不完整 - IP: {printer_ip}, 名称: {printer_name}, 设备: {device_path}")
+            print(f"  提示: 需要至少配置 printer_ip、printer_name 或 device_path 之一")
+        else:
+            config_info = []
+            if printer_ip:
+                config_info.append(f"IP={printer_ip}:{printer_port}")
+            if printer_name:
+                config_info.append(f"名称={printer_name}")
+            if device_path:
+                config_info.append(f"设备={device_path}")
+            print(f"✓ ESC/POS打印机已配置: {', '.join(config_info)}")
     
     def print_receipt(self, receipt_data):
         """
@@ -268,20 +283,28 @@ class ESCPOSPrinter:
         
         print(f"  准备发送ESC/POS命令: {len(commands)} 字节")
         print(f"  命令预览 (前32字节): {commands[:32].hex()}")
+        print(f"  当前配置 - IP: {self.printer_ip}, 名称: {self.printer_name}, 设备: {self.device_path}")
         
         # 优先使用网络打印
         if self.printer_ip:
+            print(f"  → 使用网络打印模式")
             return self._send_network(commands)
         
         # Windows打印
         if self.system == 'Windows' and self.printer_name:
+            print(f"  → 使用Windows打印模式")
             return self._send_windows(commands)
         
         # Linux设备直连
         if self.system == 'Linux' and self.device_path:
+            print(f"  → 使用Linux设备直连模式")
             return self._send_device(commands)
         
-        print("✗ 错误：未配置打印机（需要设置 printer_ip、printer_name 或 device_path）")
+        # 没有可用的配置
+        error_msg = f"✗ 错误：未配置打印机（需要设置 printer_ip、printer_name 或 device_path）"
+        print(error_msg)
+        print(f"  当前系统: {self.system}")
+        print(f"  当前配置: IP={self.printer_ip}, 名称={self.printer_name}, 设备={self.device_path}")
         return False
     
     def _send_network(self, commands):

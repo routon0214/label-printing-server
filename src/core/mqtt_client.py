@@ -254,11 +254,22 @@ class LabelPrintMQTT:
     
     def _create_escpos_printer(self, cfg):
         """创建ESC/POS打印机实例"""
+        printer_ip = cfg.get('ip')
+        printer_port = cfg.get('port', 9100)
+        printer_name = cfg.get('name')
+        device_path = cfg.get('device')
+        
+        print(f"  创建ESC/POS打印机实例:")
+        print(f"    IP: {printer_ip}")
+        print(f"    端口: {printer_port}")
+        print(f"    名称: {printer_name}")
+        print(f"    设备: {device_path}")
+        
         return ESCPOSPrinter(
-            printer_ip=cfg.get('ip'),
-            printer_port=cfg.get('port', 9100),
-            printer_name=cfg.get('name'),
-            device_path=cfg.get('device')
+            printer_ip=printer_ip,
+            printer_port=printer_port,
+            printer_name=printer_name,
+            device_path=device_path
         )
     
     def on_connect(self, client, userdata, flags, rc):
