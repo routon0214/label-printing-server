@@ -77,23 +77,26 @@ class PrintQueue:
         添加打印任务到队列
         
         Args:
-            task_data: 打印任务数据（包含print_type, format, content等）
+            task_data: 打印任务数据（可以是旧格式或新格式）
             printer_instance: 打印机实例
             
         Returns:
             任务ID
         """
+        # 标准化数据格式（支持新旧格式）
+        normalized_data = self._normalize_print_data(task_data)
+        
         # 生成任务ID
         task_id = self._generate_task_id()
         
-        # 保存任务到文件
-        task_file = self._save_task_file(task_id, task_data)
+        # 保存任务到文件（保存标准化后的数据）
+        task_file = self._save_task_file(task_id, normalized_data)
         
         # 添加到队列
         task_info = {
             'task_id': task_id,
             'task_file': task_file,
-            'task_data': task_data,
+            'task_data': normalized_data,  # 使用标准化后的数据
             'printer': printer_instance,
             'created_at': datetime.datetime.now().isoformat()
         }
@@ -104,6 +107,79 @@ class PrintQueue:
         print(f"  队列长度: {self.task_queue.qsize()}")
         
         return task_id
+    
+    def _normalize_print_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        将打印数据标准化为统一格式（新格式）
+        
+        如果数据已经是新格式，直接返回；否则转换为新格式。
+        
+        Args:
+            data: 打印数据字典（应该是新格式，但兼容旧格式）
+            
+        Returns:
+            标准化后的数据字典（统一新格式）
+        """
+        # 确保输入是字典类型
+        if not isinstance(data, dict):
+            raise ValueError(f"打印数据必须是字典对象，当前类型为: {type(data).__name__}")
+        
+        # 如果已经是新格式（包含format和content字段），验证后直接返回
+        if 'format' in data and 'content' in data:
+            # 验证content不为None
+            if data.get('content') is None:
+                raise ValueError(f"新格式数据的content字段不能为空 (format: {data.get('format')})")
+            return data
+        
+        # 如果不是新格式，转换为新格式（向后兼容）
+        print_type = data.get('print_type', 'label')
+        
+        if 'zpl_code' in data:
+            # 旧格式: zpl_code → 新格式
+            return {
+                'print_type': print_type,
+                'format': 'zpl',
+                'content': data['zpl_code']
+            }
+        
+        elif 'raw_text' in data:
+            # 旧格式: raw_text → 新格式
+            raw_text = data.get('raw_text')
+            if raw_text is None:
+                raise ValueError("raw_text字段不能为空")
+            
+            return {
+                'print_type': print_type,
+                'format': 'raw',
+                'content': raw_text,
+                'encoding': data.get('encoding', 'gb2312')
+            }
+        
+        elif 'fields' in data or 'title' in data or 'items' in data:
+            # 旧格式: 结构化数据 → 新格式
+            content = {}
+            # 复制所有字段到content（除了print_type）
+            for key, value in data.items():
+                if key != 'print_type':
+                    content[key] = value
+            
+            return {
+                'print_type': print_type,
+                'format': 'structured',
+                'content': content
+            }
+        
+        # 无法识别的格式，尝试作为结构化数据处理
+        content = {}
+        for key, value in data.items():
+            if key != 'print_type':
+                content[key] = value
+        
+        return {
+            'print_type': print_type,
+            'format': 'structured',
+            'content': content if content else data
+        }
     
     def _generate_task_id(self) -> str:
         """生成任务ID"""
@@ -282,7 +358,7 @@ class PrintQueue:
                 
                 receipt_data = {
                     'raw_text': content,
-                    'encoding': task_data.get('encoding', 'gb2312')
+                    'encoding': task_data.get('encoding', 'gb2312')  # 从task_data获取encoding
                 }
             
             elif data_format == 'structured':
@@ -296,6 +372,9 @@ class PrintQueue:
                     return False
                 
                 receipt_data = content
+                # 如果structured格式中没有encoding，尝试从task_data获取
+                if 'encoding' not in receipt_data and 'encoding' in task_data:
+                    receipt_data['encoding'] = task_data['encoding']
             
             else:
                 print(f"  [错误] 不支持的小票格式: {data_format}")

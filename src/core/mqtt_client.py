@@ -274,6 +274,113 @@ class LabelPrintMQTT:
             device_path=device_path
         )
     
+    def _normalize_print_data(self, data):
+        """
+        将打印数据标准化为统一格式（新格式）
+        
+        旧格式自动转换为新格式：
+        - zpl_code → format: "zpl", content: zpl_code
+        - raw_text → format: "raw", content: raw_text
+        - fields → format: "structured", content: {fields, ...}
+        
+        Args:
+            data: 打印数据字典（可以是旧格式或新格式）
+            
+        Returns:
+            标准化后的数据字典（统一新格式）
+        """
+        # 确保输入是字典类型
+        if not isinstance(data, dict):
+            raise ValueError(f"打印数据必须是字典对象，当前类型为: {type(data).__name__}")
+        
+        # 如果已经是新格式（包含format和content字段），验证后返回
+        if 'format' in data and 'content' in data:
+            # 验证content不为None
+            if data.get('content') is None:
+                raise ValueError(f"新格式数据的content字段不能为空 (format: {data.get('format')})")
+            return data
+        
+        print_type = data.get('print_type', 'label')
+        
+        # 向后兼容：转换旧格式为新格式
+        if 'zpl_code' in data:
+            # 旧格式: zpl_code → 新格式
+            return {
+                'print_type': print_type,
+                'format': 'zpl',
+                'content': data['zpl_code']
+            }
+        
+        elif 'raw_text' in data:
+            # 旧格式: raw_text → 新格式
+            raw_text = data.get('raw_text')
+            if raw_text is None:
+                raise ValueError("raw_text字段不能为空")
+            
+            return {
+                'print_type': print_type,
+                'format': 'raw',
+                'content': raw_text,
+                'encoding': data.get('encoding', 'gb2312')
+            }
+        
+        elif 'fields' in data or 'title' in data or 'items' in data:
+            # 旧格式: 结构化数据 → 新格式
+            content = {}
+            # 复制所有字段到content（除了print_type）
+            for key, value in data.items():
+                if key != 'print_type':
+                    content[key] = value
+            
+            return {
+                'print_type': print_type,
+                'format': 'structured',
+                'content': content
+            }
+        
+        # 无法识别的格式，尝试作为结构化数据处理
+        content = {}
+        for key, value in data.items():
+            if key != 'print_type':
+                content[key] = value
+        
+        return {
+            'print_type': print_type,
+            'format': 'structured',
+            'content': content if content else data
+        }
+    
+    def _convert_normalized_to_receipt_data(self, normalized_data):
+        """
+        将标准化后的数据转换为print_receipt方法需要的格式
+        
+        Args:
+            normalized_data: 标准化后的数据（新格式）
+            
+        Returns:
+            转换后的receipt_data，如果无法转换返回None
+        """
+        if not isinstance(normalized_data, dict):
+            return None
+        
+        data_format = normalized_data.get('format', 'structured')
+        content = normalized_data.get('content')
+        
+        if data_format == 'raw':
+            # 原始文本格式
+            return {
+                'raw_text': content,
+                'encoding': normalized_data.get('encoding', 'gb2312')
+            }
+        elif data_format == 'structured':
+            # 结构化格式，content本身就是receipt_data
+            if isinstance(content, dict):
+                return content
+            else:
+                return None
+        else:
+            return None
+    
     def _convert_to_receipt_data(self, data):
         """
         转换数据格式以兼容旧的print_receipt方法
@@ -525,12 +632,15 @@ class LabelPrintMQTT:
         处理单个打印任务
         
         Args:
-            data: 打印数据字典
+            data: 打印数据字典（可以是旧格式或新格式，会自动标准化）
             
         Returns:
             bool: 是否成功
         """
         try:
+            # 先标准化数据格式（统一转换为新格式）
+            normalized_data = self._normalize_print_data(data)
+            
             # 保存接收到的原始数据用于调试（可选）
             try:
                 import os
@@ -538,15 +648,15 @@ class LabelPrintMQTT:
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 debug_file = f"data/debug/mqtt_received_{timestamp}.json"
                 with open(debug_file, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    json.dump(normalized_data, f, ensure_ascii=False, indent=2)
                 if logger:
                     logger.debug(f"接收到的数据已保存到: {debug_file}")
             except Exception as save_error:
                 if logger:
                     logger.warning(f"无法保存调试数据: {save_error}")
             
-            # 判断打印类型
-            print_type = data.get('print_type', 'label')  # 默认是标签打印
+            # 判断打印类型（使用标准化后的数据）
+            print_type = normalized_data.get('print_type', 'label').lower()
             
             # 根据打印类型选择对应的打印机
             if print_type == 'pdf':
@@ -570,8 +680,11 @@ class LabelPrintMQTT:
                     else:
                         print("  使用: 通用打印机（备选）")
                     
-                    pdf_data = data.get('pdf_data') or data.get('pdf_file')
-                    printer_name = data.get('printer')
+                    pdf_data = normalized_data.get('content')  # 从标准化后的数据获取
+                    if normalized_data.get('format') == 'raw':
+                        # 如果是raw格式，content就是PDF的base64数据
+                        pdf_data = normalized_data.get('content')
+                    printer_name = normalized_data.get('printer')
                     
                     if not pdf_data:
                         error_msg = "缺少PDF数据"
@@ -628,35 +741,39 @@ class LabelPrintMQTT:
                     else:
                         print("  使用: 通用打印机（备选）")
                     
-                    # 检查是否使用原始文本格式
-                    if 'raw_text' in data:
+                    # 使用标准化后的数据
+                    data_format = normalized_data.get('format', 'structured')
+                    content = normalized_data.get('content')
+                    
+                    # 检查数据格式
+                    if data_format == 'raw':
                         print("  格式: 原始文本")
-                        print(f"  原始文本长度: {len(data.get('raw_text', ''))} 字符")
-                        print(f"  编码: {data.get('encoding', '未指定')}")
+                        print(f"  原始文本长度: {len(content) if content else 0} 字符")
+                        print(f"  编码: {normalized_data.get('encoding', '未指定')}")
                         if logger:
-                            logger.debug(f"原始文本预览: {data.get('raw_text', '')[:100]}")
+                            logger.debug(f"原始文本预览: {content[:100] if content else ''}")
                     else:
                         print("  格式: 结构化小票")
-                        print(f"  数据字段: {list(data.keys())}")
+                        print(f"  数据格式: {data_format}")
                         if logger:
-                            logger.debug(f"结构化数据: {json.dumps(data, ensure_ascii=False)[:200]}")
+                            logger.debug(f"结构化数据: {json.dumps(normalized_data, ensure_ascii=False)[:200]}")
                     
                     # 记录打印前的数据状态
-                    print(f"  准备调用 print_receipt，数据键: {list(data.keys())}")
+                    print(f"  准备调用打印队列，数据格式: {data_format}")
                     print(f"  打印机实例类型: {type(receipt_printer).__name__}")
                     print(f"  打印机配置 - IP: {receipt_printer.printer_ip}, 名称: {receipt_printer.printer_name}, 设备: {receipt_printer.device_path}")
                     if logger:
-                        logger.debug(f"打印数据: {json.dumps(data, ensure_ascii=False)}")
+                        logger.debug(f"打印数据: {json.dumps(normalized_data, ensure_ascii=False)}")
                         logger.debug(f"打印机实例: {type(receipt_printer).__name__}")
                         logger.debug(f"打印机配置 - IP: {receipt_printer.printer_ip}, 名称: {receipt_printer.printer_name}, 设备: {receipt_printer.device_path}")
                     
-                    # 使用统一的打印队列处理
+                    # 使用统一的打印队列处理（传入标准化后的数据）
                     try:
                         from src.utils.print_queue import get_print_queue
                         print_queue = get_print_queue()
                         
-                        # 将任务添加到打印队列
-                        task_id = print_queue.add_task(data, receipt_printer)
+                        # 将任务添加到打印队列（使用标准化后的数据）
+                        task_id = print_queue.add_task(normalized_data, receipt_printer)
                         print(f"  ✓ 打印任务已加入队列: {task_id}")
                         if logger:
                             logger.info(f"打印任务已加入队列: {task_id}")
@@ -670,14 +787,14 @@ class LabelPrintMQTT:
                         if logger:
                             logger.warning("打印队列模块不可用，使用直接打印模式")
                         
-                        # 转换数据格式以兼容旧的print_receipt方法
-                        receipt_data = self._convert_to_receipt_data(data)
+                        # 转换标准化数据格式以兼容旧的print_receipt方法
+                        receipt_data = self._convert_normalized_to_receipt_data(normalized_data)
                         
                         if receipt_data is None:
                             error_msg = "ESC/POS数据格式错误：无法解析数据"
                             print(f"[ERROR] {error_msg}")
                             if logger:
-                                logger.error(f"{error_msg}, 数据键: {list(data.keys())}")
+                                logger.error(f"{error_msg}, 数据格式: {data_format}")
                             success = False
                         else:
                             try:
@@ -734,17 +851,20 @@ class LabelPrintMQTT:
                     else:
                         print("  使用: 通用打印机（备选）")
                     
-                    # 获取ZPL代码：支持直接发送或自动生成
+                    # 获取ZPL代码：使用标准化后的数据
                     try:
-                        if 'zpl_code' in data:
+                        data_format = normalized_data.get('format', 'structured')
+                        content = normalized_data.get('content')
+                        
+                        if data_format == 'zpl':
                             # 直接使用提供的ZPL代码
-                            zpl_code = data.get('zpl_code')
+                            zpl_code = content
                             print("  ZPL来源: 直接提供")
                             if logger:
                                 logger.debug(f"使用直接提供的ZPL代码，长度: {len(zpl_code) if zpl_code else 0}")
                         else:
-                            # 根据数据自动生成ZPL代码
-                            zpl_code = self.zpl_generator.generate_label_zpl(data)
+                            # 根据结构化数据自动生成ZPL代码
+                            zpl_code = self.zpl_generator.generate_label_zpl(content if isinstance(content, dict) else normalized_data)
                             print("  ZPL来源: 自动生成")
                             if logger:
                                 logger.debug(f"自动生成ZPL代码，长度: {len(zpl_code) if zpl_code else 0}")
