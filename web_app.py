@@ -754,7 +754,7 @@ async def print_raw(
     request: Request,
     username: str = Depends(verify_credentials)
 ):
-    """处理原始数据打印请求（JSON格式）- 使用队列"""
+    """处理原始数据打印请求（JSON格式）- 使用队列，支持单个对象或数组"""
     global print_queue
     
     try:
@@ -765,37 +765,101 @@ async def print_raw(
                 content={"success": False, "error": "无效的JSON数据"}
             )
         
-        # 标准化数据格式（支持新旧格式）
-        normalized_data = normalize_print_data(data)
-        print_type = normalized_data.get('print_type', 'label').lower()
-        data_format = normalized_data.get('format', 'structured')
-        
-        print(f"\n[打印请求]")
-        print(f"  类型: {print_type}")
-        print(f"  格式: {data_format}")
-        
-        # 获取打印机实例
-        printer = get_printer_instance(print_type)
-        if not printer:
-            return JSONResponse(
-                status_code=400,
-                content={"success": False, "error": f'未配置{print_type}打印机'}
-            )
-        
-        # 添加到打印队列
+        # 初始化打印队列
         if print_queue is None:
             print_queue = get_print_queue()
         
-        task_id = print_queue.add_task(normalized_data, printer)
+        # 检测是否为数组格式
+        is_array = isinstance(data, list)
         
-        print(f"  [OK] 任务已加入队列: {task_id}")
+        # 统一处理为数组格式
+        data_list = data if is_array else [data]
         
-        return JSONResponse({
-            "success": True,
-            "message": f'{print_type.upper()}打印任务已加入队列',
-            "task_id": task_id,
-            "queue_size": print_queue.get_status()['queue_size']
-        })
+        print(f"\n[打印请求]")
+        print(f"  格式: {'数组' if is_array else '单个对象'}")
+        print(f"  任务数量: {len(data_list)}")
+        
+        # 处理每个打印任务
+        results = []
+        task_ids = []
+        errors = []
+        
+        for idx, item in enumerate(data_list):
+            try:
+                # 标准化数据格式（支持新旧格式）
+                normalized_data = normalize_print_data(item)
+                print_type = normalized_data.get('print_type', 'label').lower()
+                data_format = normalized_data.get('format', 'structured')
+                
+                print(f"  [任务 {idx + 1}] 类型: {print_type}, 格式: {data_format}")
+                
+                # 获取打印机实例
+                printer = get_printer_instance(print_type)
+                if not printer:
+                    error_msg = f'未配置{print_type}打印机'
+                    print(f"    [ERROR] {error_msg}")
+                    errors.append({"index": idx, "error": error_msg})
+                    continue
+                
+                # 添加到打印队列
+                task_id = print_queue.add_task(normalized_data, printer)
+                task_ids.append(task_id)
+                
+                print(f"    [OK] 任务已加入队列: {task_id}")
+                results.append({
+                    "index": idx,
+                    "success": True,
+                    "task_id": task_id,
+                    "print_type": print_type
+                })
+                
+            except Exception as item_error:
+                error_msg = f'处理任务 {idx + 1} 时出错: {str(item_error)}'
+                print(f"    [ERROR] {error_msg}")
+                errors.append({"index": idx, "error": error_msg})
+                results.append({
+                    "index": idx,
+                    "success": False,
+                    "error": error_msg
+                })
+        
+        # 统计结果
+        success_count = len([r for r in results if r.get('success')])
+        failed_count = len(errors)
+        
+        print(f"  [结果] 成功: {success_count}, 失败: {failed_count}")
+        print(f"  [队列] 当前队列大小: {print_queue.get_status()['queue_size']}")
+        
+        # 返回结果
+        if is_array:
+            # 数组格式：返回详细的每个任务的结果
+            return JSONResponse({
+                "success": success_count > 0,
+                "message": f'批量打印任务处理完成: 成功 {success_count} 个, 失败 {failed_count} 个',
+                "total": len(data_list),
+                "success_count": success_count,
+                "failed_count": failed_count,
+                "task_ids": task_ids,
+                "results": results,
+                "queue_size": print_queue.get_status()['queue_size']
+            })
+        else:
+            # 单个对象格式：保持原有的返回格式
+            if results and results[0].get('success'):
+                return JSONResponse({
+                    "success": True,
+                    "message": f'{results[0].get("print_type", "").upper()}打印任务已加入队列',
+                    "task_id": task_ids[0] if task_ids else None,
+                    "queue_size": print_queue.get_status()['queue_size']
+                })
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "error": errors[0]['error'] if errors else "处理任务失败"
+                    }
+                )
     
     except Exception as e:
         import traceback
