@@ -44,7 +44,19 @@ sys.path.insert(0, os.path.join(project_root, 'src'))
 def get_resource_path(relative_path):
     """获取资源文件的绝对路径（兼容打包后的环境）"""
     if getattr(sys, 'frozen', False):
-        # 打包后的路径 (PyInstaller)
+        # 打包后的路径：优先使用可执行文件所在目录（用于用户可修改的文件）
+        # templates/static 等只读资源使用 _MEIPASS
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # 开发环境路径
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+
+def get_internal_resource_path(relative_path):
+    """获取内部资源文件的绝对路径（打包后在 _internal 目录）"""
+    if getattr(sys, 'frozen', False):
+        # 打包后的内部资源路径 (templates, static 等)
         base_path = sys._MEIPASS
     else:
         # 开发环境路径
@@ -134,8 +146,9 @@ async def shutdown_event():
     stop_mqtt_client()
 
 # 静态文件和模板（兼容打包后的环境）
-static_dir = get_resource_path('static')
-templates_dir = get_resource_path('templates')
+# 这些是只读资源，使用 _internal 目录
+static_dir = get_internal_resource_path('static')
+templates_dir = get_internal_resource_path('templates')
 
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")

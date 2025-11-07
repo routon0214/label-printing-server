@@ -404,12 +404,12 @@ def build_with_ultimate_config(hook_dir):
     ]
     
     # 添加数据文件
+    # templates 和 static 打包到 _internal（只读资源）
     if os.path.exists('templates'):
         cmd.append(f'--add-data=templates{path_sep}templates')
     if os.path.exists('static'):
         cmd.append(f'--add-data=static{path_sep}static')
-    if os.path.exists('data/test_samples'):
-        cmd.append(f'--add-data=data/test_samples{path_sep}data/test_samples')
+    # data/test_samples 不打包到 _internal，稍后手动复制到根目录（用户可修改）
     
     # Windows 特定
     if system == 'Windows':
@@ -432,6 +432,42 @@ def build_with_ultimate_config(hook_dir):
         print(f"[ERROR] 打包失败")
         print(f"\n错误输出:\n{e.stderr}")
         return False
+
+
+def copy_data_files():
+    """复制数据文件到打包目录（供用户修改）"""
+    print("\n复制数据文件到打包目录...")
+    
+    dist_dir = 'dist/label-printing-server'
+    
+    if not os.path.exists(dist_dir):
+        print("[ERROR] 打包目录不存在")
+        return False
+    
+    # 需要复制的目录列表
+    data_dirs = [
+        'data/test_samples',  # 测试示例
+    ]
+    
+    for data_dir in data_dirs:
+        if os.path.exists(data_dir):
+            target_dir = os.path.join(dist_dir, data_dir)
+            
+            # 如果目标目录已存在，先删除（避免重复）
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir)
+            
+            # 复制目录
+            try:
+                shutil.copytree(data_dir, target_dir)
+                print(f"  [OK] 已复制 {data_dir} -> {target_dir}")
+            except Exception as e:
+                print(f"  [ERROR] 复制 {data_dir} 失败: {e}")
+                return False
+        else:
+            print(f"  [WARNING] 源目录不存在: {data_dir}")
+    
+    return True
 
 
 def verify_build():
@@ -473,19 +509,26 @@ def verify_build():
         else:
             print(f"  [ERROR] 未找到 Jinja2 文件")
     
-    # 检查 templates
-    templates_dir = os.path.join(dist_dir, 'templates')
-    if os.path.exists(templates_dir):
-        print(f"  [OK] templates/ 目录")
+    # 检查 templates（在 _internal 中）
+    templates_dir_internal = os.path.join(internal_dir, 'templates')
+    if os.path.exists(templates_dir_internal):
+        print(f"  [OK] _internal/templates/ 目录")
     
-    # 检查 test_samples
+    # 复制数据文件到根目录
+    if not copy_data_files():
+        print(f"  [WARNING] 数据文件复制失败")
+    
+    # 检查 test_samples（在根目录）
     test_samples_dir = os.path.join(dist_dir, 'data', 'test_samples')
     if os.path.exists(test_samples_dir):
-        print(f"  [OK] data/test_samples/ 目录")
+        print(f"  [OK] data/test_samples/ 目录（根目录）")
         # 检查关键文件
         examples_file = os.path.join(test_samples_dir, 'examples.json')
         if os.path.exists(examples_file):
             print(f"  [OK] examples.json")
+            # 统计示例文件数量
+            sample_files = [f for f in os.listdir(test_samples_dir) if f.endswith('.json') or f.endswith('.zpl')]
+            print(f"  [OK] 找到 {len(sample_files)} 个示例文件")
         else:
             print(f"  [WARNING] examples.json 缺失")
     else:
@@ -552,6 +595,9 @@ def create_zip_package():
     
     try:
         # 创建zip文件
+        file_count = 0
+        test_samples_count = 0
+        
         with zipfile.ZipFile(zip_filename_simple, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # 遍历目录
             for root, dirs, files in os.walk(dist_dir):
@@ -560,6 +606,11 @@ def create_zip_package():
                     # 计算相对路径
                     arcname = os.path.relpath(file_path, 'dist')
                     zipf.write(file_path, arcname)
+                    file_count += 1
+                    
+                    # 统计 test_samples 文件
+                    if 'test_samples' in file_path:
+                        test_samples_count += 1
                     
         # 复制一份带时间戳的
         shutil.copy2(zip_filename_simple, zip_filename)
@@ -569,6 +620,7 @@ def create_zip_package():
         
         print(f"  [OK] 已创建: {zip_filename_simple} ({zip_size:.2f} MB)")
         print(f"  [OK] 备份版本: {zip_filename}")
+        print(f"  [OK] 包含文件: {file_count} 个（其中 {test_samples_count} 个示例文件）")
         
         return True
         
