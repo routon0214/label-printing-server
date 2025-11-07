@@ -1406,6 +1406,30 @@ async def get_examples(username: str = Depends(verify_credentials)):
 async def get_example_data(example_id: str, username: str = Depends(verify_credentials)):
     """获取指定示例的数据"""
     try:
+        # 特殊处理：直接读取数组格式的示例文件
+        if example_id == 'escpos_raw_text_list':
+            file_path = get_resource_path('data/test_samples/escpos_raw_text_list.json')
+            if not os.path.exists(file_path):
+                return JSONResponse(
+                    status_code=404,
+                    content={"success": False, "error": f"示例文件不存在: {file_path}"}
+                )
+            
+            # 读取文件内容（数组格式）
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            return JSONResponse({
+                "success": True,
+                "example": {
+                    "id": "escpos_raw_text_list",
+                    "title": "ESC/POS批量打印（数组格式）",
+                    "desc": f"包含 {len(data) if isinstance(data, list) else 1} 个打印任务的数组格式示例",
+                    "category": "批量打印（数组格式）"
+                },
+                "data": data
+            })
+        
         # 读取示例配置
         examples_file = get_resource_path('data/test_samples/examples.json')
         if not os.path.exists(examples_file):

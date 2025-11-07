@@ -1,0 +1,10 @@
+[{
+  "print_type": "escpos",
+  "raw_text": "SIZE 60 mm, 40 mm\nGAP 1 mm, 0 mm\nDIRECTION 1,0\nREFERENCE 0,0\nOFFSET 0 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n",
+  "encoding": "gb2312"
+},{
+  "print_type": "escpos",
+  "raw_text": "SIZE 60 mm, 40 mm\nGAP 1 mm, 0 mm\nDIRECTION 1,0\nREFERENCE 0,0\nOFFSET 0 mm\nCLS\nTEXT 20,10,\"TSS24.BF2\",0,1,1,\"容器类型\"\nQRCODE 20,60,L,10,A,0,M2,S6,\"ECKQ\"\nTEXT 240,60,\"TSS24.BF2\",0,1,2,\"二次库区托盘\"\nTEXT 240,120,\"TSS24.BF2\",0,1,2,\"编号:ECKQ\"\nTEXT 240,170,\"TSS24.BF2\",0,1,2,\"尺寸:null*0*null\"\nTEXT 240,220,\"TSS24.BF2\",0,1,2,\"载重:0\"\nPRINT 1\n",
+  "encoding": "gb2312"
+}
+]

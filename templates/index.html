@@ -61,12 +61,15 @@
                                         <option value="deli_receipt">ESC/POS小票（结构化）</option>
                                         <option value="deli_raw">ESC/POS小票（纯文本）</option>
                                     </optgroup>
+                                    <optgroup label="批量打印（数组格式）">
+                                        <option value="escpos_raw_text_list">ESC/POS批量打印（数组）</option>
+                                    </optgroup>
                                 </select>
                                 <button class="btn btn-primary" onclick="quickPrintExample()" id="quick-print-btn" style="white-space: nowrap; min-width: 120px;" disabled>
                                     <span>⚡ 快速打印</span>
                                 </button>
                             </div>
-                            <small>💡 选择示例后自动加载，可直接点击"快速打印"或编辑后再打印</small>
+                            <small>💡 选择示例后自动加载，可直接点击"快速打印"或编辑后再打印。数组格式可批量打印多个任务</small>
                         </div>
                         
                         <div id="example-preview-mini" class="example-preview-mini" style="display: none;">
@@ -90,8 +93,8 @@
                         <div class="form-group">
                             <label for="json-input">JSON数据:</label>
                             <textarea id="json-input" name="json_data" rows="10" 
-                                      placeholder='{"print_type": "label", "format": "structured", "content": {"title": "测试", "fields": [{"label": "产品", "value": "元件A", "font_size": 20}]}}'></textarea>
-                            <small>支持标签、PDF、小票打印的JSON格式数据</small>
+                                      placeholder='单个对象: {"print_type": "label", "format": "structured", "content": {...}}&#10;&#10;或数组格式（批量打印）: [{"print_type": "escpos", "raw_text": "..."}, {"print_type": "label", "format": "zpl", "content": "..."}]'></textarea>
+                            <small>💡 支持单个对象或数组格式（数组可批量打印多个任务）</small>
                         </div>
 
                         <div class="form-group">
@@ -986,6 +989,18 @@
                 return;
             }
             
+            // 验证数据格式
+            const isArray = Array.isArray(jsonData);
+            if (!isArray && typeof jsonData !== 'object') {
+                showResult(resultDiv, 'JSON数据必须是对象或数组', 'error');
+                return;
+            }
+            
+            if (isArray && jsonData.length === 0) {
+                showResult(resultDiv, '数组不能为空', 'error');
+                return;
+            }
+            
             btn.disabled = true;
             btn.querySelector('.btn-text').style.display = 'none';
             btn.querySelector('.btn-loading').style.display = 'inline';
@@ -1003,7 +1018,38 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showResult(resultDiv, data.message || '打印任务已发送', 'success');
+                    // 如果是数组格式，显示详细信息
+                    if (isArray && data.total !== undefined) {
+                        let message = `✅ ${data.message || '批量打印任务处理完成'}`;
+                        if (data.total > 0) {
+                            message += `\n📊 总计: ${data.total} 个任务`;
+                            message += `\n✅ 成功: ${data.success_count} 个`;
+                            if (data.failed_count > 0) {
+                                message += `\n❌ 失败: ${data.failed_count} 个`;
+                            }
+                            if (data.task_ids && data.task_ids.length > 0) {
+                                message += `\n🆔 任务ID: ${data.task_ids.slice(0, 3).join(', ')}${data.task_ids.length > 3 ? '...' : ''}`;
+                            }
+                        }
+                        showResult(resultDiv, message, 'success');
+                        
+                        // 如果有失败的任务，显示详细信息
+                        if (data.failed_count > 0 && data.results) {
+                            const failedTasks = data.results.filter(r => !r.success);
+                            if (failedTasks.length > 0) {
+                                setTimeout(() => {
+                                    let errorDetails = '失败任务详情:\n';
+                                    failedTasks.forEach(task => {
+                                        errorDetails += `任务 ${task.index + 1}: ${task.error || '未知错误'}\n`;
+                                    });
+                                    alert(errorDetails);
+                                }, 500);
+                            }
+                        }
+                    } else {
+                        // 单个对象格式，显示简单消息
+                        showResult(resultDiv, data.message || '打印任务已发送', 'success');
+                    }
                 } else {
                     showResult(resultDiv, data.error || '打印失败', 'error');
                 }
@@ -1062,14 +1108,17 @@
 
         // 显示结果消息
         function showResult(element, message, type) {
-            element.textContent = message;
+            // 支持多行消息（保留换行符）
+            element.innerHTML = message.replace(/\n/g, '<br>');
             element.className = 'result-message ' + (type === 'success' ? 'result-success' : 'result-error');
             element.style.display = 'block';
             
+            // 根据消息长度调整显示时间
+            const displayTime = message.length > 100 ? 5000 : 3000;
             if (type === 'success') {
                 setTimeout(() => {
                     element.style.display = 'none';
-                }, 3000);
+                }, displayTime);
             }
         }
 
@@ -1132,6 +1181,28 @@
             }
             
             try {
+                // 特殊处理：直接加载数组格式的示例文件
+                if (exampleId === 'escpos_raw_text_list') {
+                    const response = await fetch('/api/examples/escpos_raw_text_list');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        // 数组格式的数据
+                        const arrayData = Array.isArray(data.data) ? data.data : [data.data];
+                        document.getElementById('json-input').value = JSON.stringify(arrayData, null, 2);
+                        
+                        // 显示预览
+                        document.getElementById('example-title-mini').textContent = 'ESC/POS批量打印（数组格式）';
+                        document.getElementById('example-desc-mini').textContent = `- 包含 ${arrayData.length} 个打印任务`;
+                        document.getElementById('example-code').textContent = JSON.stringify(arrayData, null, 2);
+                        previewMini.style.display = 'block';
+                        quickPrintBtn.disabled = false;
+                        
+                        showResult(document.getElementById('json-result'), `✓ 数组示例已加载（${arrayData.length}个任务），可直接批量打印`, 'success');
+                        return;
+                    }
+                }
+                
                 // 从缓存或API获取示例数据
                 let exampleData;
                 if (examplesCache[exampleId]) {
@@ -1155,8 +1226,11 @@
                 document.getElementById('json-input').value = JSON.stringify(exampleData.data, null, 2);
                 
                 // 显示简化预览
+                const isArray = Array.isArray(exampleData.data);
                 document.getElementById('example-title-mini').textContent = exampleData.example.title;
-                document.getElementById('example-desc-mini').textContent = '- ' + exampleData.example.desc;
+                document.getElementById('example-desc-mini').textContent = isArray 
+                    ? `- ${exampleData.example.desc} (${exampleData.data.length}个任务)`
+                    : '- ' + exampleData.example.desc;
                 document.getElementById('example-code').textContent = JSON.stringify(exampleData.data, null, 2);
                 previewMini.style.display = 'block';
                 
@@ -1164,7 +1238,10 @@
                 quickPrintBtn.disabled = false;
                 
                 // 提示
-                showResult(document.getElementById('json-result'), '✓ 示例已自动加载，可直接打印或编辑', 'success');
+                const loadMsg = isArray 
+                    ? `✓ 数组示例已自动加载（${exampleData.data.length}个任务），可直接批量打印或编辑`
+                    : '✓ 示例已自动加载，可直接打印或编辑';
+                showResult(document.getElementById('json-result'), loadMsg, 'success');
             } catch (error) {
                 console.error('加载示例失败:', error);
                 showResult(document.getElementById('json-result'), '加载示例失败: ' + error.message, 'error');
@@ -1201,6 +1278,13 @@
                 return;
             }
             
+            // 验证数据格式
+            const isArray = Array.isArray(jsonData);
+            if (!isArray && typeof jsonData !== 'object') {
+                showResult(resultDiv, 'JSON数据必须是对象或数组', 'error');
+                return;
+            }
+            
             jsonBtn.disabled = true;
             jsonBtn.querySelector('.btn-text').style.display = 'none';
             jsonBtn.querySelector('.btn-loading').style.display = 'inline';
@@ -1218,7 +1302,16 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showResult(resultDiv, '⚡ ' + (data.message || '打印任务已发送'), 'success');
+                    // 如果是数组格式，显示详细信息
+                    if (isArray && data.total !== undefined) {
+                        let message = `⚡ ${data.message || '批量打印任务处理完成'}`;
+                        if (data.total > 0) {
+                            message += ` (${data.success_count}/${data.total} 成功)`;
+                        }
+                        showResult(resultDiv, message, 'success');
+                    } else {
+                        showResult(resultDiv, '⚡ ' + (data.message || '打印任务已发送'), 'success');
+                    }
                 } else {
                     showResult(resultDiv, data.error || '打印失败', 'error');
                 }
