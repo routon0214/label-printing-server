@@ -349,29 +349,103 @@ class ESCPOSPrinter:
                 return False
             
             import win32print
+            import win32api
+            import win32con
             
             print(f"  准备发送 {len(commands)} 字节到打印机: {self.printer_name}")
             
-            # 检查打印机是否存在
+            # 检查打印机是否存在和状态
+            printer_handle = None
             try:
+                # 打开打印机以检查状态
                 printer_handle = win32print.OpenPrinter(self.printer_name)
-            except Exception as open_error:
-                print(f"✗ 无法打开打印机 '{self.printer_name}': {open_error}")
-                print(f"  提示: 请检查打印机名称是否正确，或打印机是否在线")
-                return False
+                
+                # 获取打印机信息
+                printer_info = win32print.GetPrinter(printer_handle, 2)
+                printer_status = printer_info.get('Status', 0)
+                
+                # 检查打印机状态
+                if printer_status != 0:
+                    status_messages = []
+                    if printer_status & win32print.PRINTER_STATUS_PAUSED:
+                        status_messages.append("已暂停")
+                    if printer_status & win32print.PRINTER_STATUS_ERROR:
+                        status_messages.append("错误")
+                    if printer_status & win32print.PRINTER_STATUS_PAPER_JAM:
+                        status_messages.append("卡纸")
+                    if printer_status & win32print.PRINTER_STATUS_PAPER_OUT:
+                        status_messages.append("缺纸")
+                    if printer_status & win32print.PRINTER_STATUS_OFFLINE:
+                        status_messages.append("离线")
+                    
+                    if status_messages:
+                        print(f"  ⚠ 警告: 打印机状态异常 - {', '.join(status_messages)}")
+                        print(f"  提示: 请检查打印机状态，但将继续尝试打印")
+                    else:
+                        print(f"  ✓ 打印机状态正常 (状态码: {printer_status})")
+                else:
+                    print(f"  ✓ 打印机状态正常")
+                
+            except Exception as status_error:
+                print(f"  ⚠ 警告: 无法获取打印机状态: {status_error}")
+                print(f"  提示: 将继续尝试打印")
+                if printer_handle:
+                    win32print.ClosePrinter(printer_handle)
+                    printer_handle = None
+            
+            # 如果状态检查时已经打开了打印机，直接使用；否则重新打开
+            if not printer_handle:
+                try:
+                    printer_handle = win32print.OpenPrinter(self.printer_name)
+                except Exception as open_error:
+                    print(f"✗ 无法打开打印机 '{self.printer_name}': {open_error}")
+                    print(f"  提示: 请检查打印机名称是否正确，或打印机是否在线")
+                    return False
             
             try:
+                # 使用RAW数据类型发送ESC/POS命令
                 job_info = ("Receipt Print", None, "RAW")
                 job_id = win32print.StartDocPrinter(printer_handle, 1, job_info)
                 print(f"  打印作业已创建 (ID: {job_id})")
                 
+                # 开始页面
                 win32print.StartPagePrinter(printer_handle)
-                bytes_written = win32print.WritePrinter(printer_handle, commands)
+                
+                # 写入数据
+                try:
+                    bytes_written = win32print.WritePrinter(printer_handle, commands)
+                    print(f"  数据已写入打印队列: {bytes_written} 字节")
+                    
+                    if bytes_written != len(commands):
+                        print(f"  ⚠ 警告: 写入字节数不匹配 (期望: {len(commands)}, 实际: {bytes_written})")
+                    
+                except Exception as write_error:
+                    print(f"✗ 写入打印队列失败: {write_error}")
+                    import traceback
+                    traceback.print_exc()
+                    return False
+                
+                # 结束页面
                 win32print.EndPagePrinter(printer_handle)
+                
+                # 结束文档
                 win32print.EndDocPrinter(printer_handle)
                 
-                print(f"✓ ESC/POS Windows打印成功: {self.printer_name} (已写入 {bytes_written} 字节)")
+                print(f"✓ ESC/POS Windows打印成功: {self.printer_name}")
+                print(f"  打印作业ID: {job_id}")
+                print(f"  已写入: {bytes_written} 字节")
+                print(f"  提示: 如果打印机没有打印，请检查:")
+                print(f"    1. 打印机是否在线")
+                print(f"    2. 打印机驱动是否正确")
+                print(f"    3. Windows打印队列中是否有错误")
+                print(f"    4. 打印机是否支持RAW格式打印")
+                
                 return True
+            except Exception as print_error:
+                print(f"✗ 打印过程出错: {print_error}")
+                import traceback
+                traceback.print_exc()
+                return False
             finally:
                 win32print.ClosePrinter(printer_handle)
             

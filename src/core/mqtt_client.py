@@ -71,13 +71,15 @@ class LabelPrintMQTT:
         self.printer_info_list = []
         
         # 如果有多打印机配置（新版）
-        if printers_config and isinstance(printers_config, list):
+        if printers_config and isinstance(printers_config, list) and len(printers_config) > 0:
             self._init_multiple_printers(printers_config)
         # 否则使用单打印机配置（旧版兼容）
         elif printer_config:
             self._init_single_printer(printer_config)
         else:
-            # 默认配置
+            # 默认配置（所有配置都为空时）
+            print("⚠ 警告: 未找到打印机配置，使用默认配置（自动检测）")
+            print("  提示: 请在配置文件中添加打印机配置，或使用旧的 'printer' 字段")
             self._init_default_printers()
         
         self.client = None
@@ -384,6 +386,21 @@ class LabelPrintMQTT:
             print(f"数据: {json.dumps(data, ensure_ascii=False, indent=2)}")
             if logger:
                 logger.info(f"消息解析成功，打印类型: {data.get('print_type', 'label')}")
+                logger.debug(f"完整数据: {json.dumps(data, ensure_ascii=False)}")
+            
+            # 保存接收到的原始数据用于调试（可选）
+            try:
+                import os
+                os.makedirs('data/debug', exist_ok=True)
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                debug_file = f"data/debug/mqtt_received_{timestamp}.json"
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                if logger:
+                    logger.debug(f"接收到的数据已保存到: {debug_file}")
+            except Exception as save_error:
+                if logger:
+                    logger.warning(f"无法保存调试数据: {save_error}")
             
             # 判断打印类型
             print_type = data.get('print_type', 'label')  # 默认是标签打印
@@ -469,22 +486,46 @@ class LabelPrintMQTT:
                     # 检查是否使用原始文本格式
                     if 'raw_text' in data:
                         print("  格式: 原始文本")
+                        print(f"  原始文本长度: {len(data.get('raw_text', ''))} 字符")
+                        print(f"  编码: {data.get('encoding', '未指定')}")
+                        if logger:
+                            logger.debug(f"原始文本预览: {data.get('raw_text', '')[:100]}")
                     else:
                         print("  格式: 结构化小票")
-                    
-                    try:
-                        success = receipt_printer.print_receipt(data)
+                        print(f"  数据字段: {list(data.keys())}")
                         if logger:
-                            if success:
-                                logger.info("ESC/POS打印成功")
-                            else:
-                                logger.error("ESC/POS打印失败（返回False）")
-                    except Exception as print_error:
-                        error_msg = f"ESC/POS打印异常: {print_error}"
+                            logger.debug(f"结构化数据: {json.dumps(data, ensure_ascii=False)[:200]}")
+                    
+                    # 记录打印前的数据状态
+                    print(f"  准备调用 print_receipt，数据键: {list(data.keys())}")
+                    print(f"  打印机实例类型: {type(receipt_printer).__name__}")
+                    print(f"  打印机配置 - IP: {receipt_printer.printer_ip}, 名称: {receipt_printer.printer_name}, 设备: {receipt_printer.device_path}")
+                    if logger:
+                        logger.debug(f"打印数据: {json.dumps(data, ensure_ascii=False)}")
+                        logger.debug(f"打印机实例: {type(receipt_printer).__name__}")
+                        logger.debug(f"打印机配置 - IP: {receipt_printer.printer_ip}, 名称: {receipt_printer.printer_name}, 设备: {receipt_printer.device_path}")
+                    
+                    # 验证数据完整性并执行打印
+                    if 'raw_text' not in data and 'title' not in data and 'items' not in data:
+                        error_msg = "ESC/POS数据格式错误：缺少必要字段（需要 raw_text 或 title/items）"
                         print(f"[ERROR] {error_msg}")
                         if logger:
-                            logger.error(error_msg, exc_info=True)
+                            logger.error(f"{error_msg}, 数据键: {list(data.keys())}")
                         success = False
+                    else:
+                        try:
+                            success = receipt_printer.print_receipt(data)
+                            if logger:
+                                if success:
+                                    logger.info("ESC/POS打印成功")
+                                else:
+                                    logger.error("ESC/POS打印失败（返回False）")
+                        except Exception as print_error:
+                            error_msg = f"ESC/POS打印异常: {print_error}"
+                            print(f"[ERROR] {error_msg}")
+                            if logger:
+                                logger.error(error_msg, exc_info=True)
+                            success = False
                 
                 # 打印结果
                 if success:
