@@ -389,8 +389,12 @@ def normalize_print_data(data):
         data: 打印数据字典
         
     Returns:
-        标准化后的数据
+        标准化后的数据字典
     """
+    # 确保输入是字典类型
+    if not isinstance(data, dict):
+        raise ValueError(f"打印数据必须是字典对象，当前类型为: {type(data).__name__}")
+    
     # 如果已经是新格式（包含format和content字段），直接返回
     if 'format' in data and 'content' in data:
         return data
@@ -786,8 +790,31 @@ async def print_raw(
         
         for idx, item in enumerate(data_list):
             try:
+                # 验证数据格式：必须是字典
+                if not isinstance(item, dict):
+                    error_msg = f'任务 {idx + 1} 的数据格式错误：必须是JSON对象，当前类型为 {type(item).__name__}'
+                    print(f"    [ERROR] {error_msg}")
+                    errors.append({"index": idx, "error": error_msg})
+                    results.append({
+                        "index": idx,
+                        "success": False,
+                        "error": error_msg
+                    })
+                    continue
+                
                 # 标准化数据格式（支持新旧格式）
                 normalized_data = normalize_print_data(item)
+                if not isinstance(normalized_data, dict):
+                    error_msg = f'任务 {idx + 1} 标准化后格式错误：必须是字典对象'
+                    print(f"    [ERROR] {error_msg}")
+                    errors.append({"index": idx, "error": error_msg})
+                    results.append({
+                        "index": idx,
+                        "success": False,
+                        "error": error_msg
+                    })
+                    continue
+                
                 print_type = normalized_data.get('print_type', 'label').lower()
                 data_format = normalized_data.get('format', 'structured')
                 
@@ -799,6 +826,11 @@ async def print_raw(
                     error_msg = f'未配置{print_type}打印机'
                     print(f"    [ERROR] {error_msg}")
                     errors.append({"index": idx, "error": error_msg})
+                    results.append({
+                        "index": idx,
+                        "success": False,
+                        "error": error_msg
+                    })
                     continue
                 
                 # 添加到打印队列
@@ -816,6 +848,8 @@ async def print_raw(
             except Exception as item_error:
                 error_msg = f'处理任务 {idx + 1} 时出错: {str(item_error)}'
                 print(f"    [ERROR] {error_msg}")
+                import traceback
+                traceback.print_exc()
                 errors.append({"index": idx, "error": error_msg})
                 results.append({
                     "index": idx,
