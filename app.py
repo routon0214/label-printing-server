@@ -120,7 +120,7 @@ def main():
             import web_app
             web_app.config_manager = config_manager
             import uvicorn
-            uvicorn.run(web_app.app, host="0.0.0.0", port=5000, log_level="info")
+            uvicorn.run(web_app.app, host="0.0.0.0", port=8000, log_level="info")
             return 0
         except ImportError as e:
             print("\n[ERROR] 错误: 无法导入web_app模块")

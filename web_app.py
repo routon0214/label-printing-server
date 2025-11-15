@@ -1763,12 +1763,12 @@ if __name__ == '__main__':
     
     print("\n" + "=" * 70)
     print("Web服务启动中...")
-    print("访问地址: http://127.0.0.1:5000")
+    print("访问地址: http://127.0.0.1:8000")
     print("=" * 70)
     print()
     
     # 启动FastAPI应用
     try:
-        uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
     except KeyboardInterrupt:
         print("\n\nWeb服务已停止")

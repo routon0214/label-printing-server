@@ -9,6 +9,12 @@ import os
 import platform
 import socket
 import codecs
+import tempfile
+
+try:
+    import cups  # type: ignore  # 可选依赖，仅Linux使用
+except ImportError:
+    cups = None
 
 
 class ESCPOSPrinter:
@@ -298,7 +304,12 @@ class ESCPOSPrinter:
         if self.system == 'Windows' and self.printer_name:
             print(f"  → 使用Windows打印模式")
             return self._send_windows(commands)
-        
+
+        # Linux CUPS打印（使用打印机名称）
+        if self.system == 'Linux' and self.printer_name:
+            print(f"  → 使用Linux CUPS打印模式")
+            return self._send_cups(commands)
+
         # Linux设备直连
         if self.system == 'Linux' and self.device_path:
             print(f"  → 使用Linux设备直连模式")
@@ -458,6 +469,53 @@ class ESCPOSPrinter:
             return False
         except Exception as e:
             print(f"✗ ESC/POS Windows打印失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _send_cups(self, commands):
+        """Linux CUPS打印（通过打印机名称）"""
+        try:
+            if not commands or len(commands) == 0:
+                print(f"✗ ESC/POS CUPS打印失败: 命令数据为空")
+                return False
+
+            if cups is None:
+                print("✗ 错误：需要安装 pycups 才能使用 CUPS 打印 (pip install pycups)")
+                return False
+
+            conn = cups.Connection()
+            printers = conn.getPrinters()
+
+            if self.printer_name not in printers:
+                print(f"✗ CUPS中未找到打印机: {self.printer_name}")
+                print(f"  可用打印机: {', '.join(printers.keys()) or '无'}")
+                return False
+
+            # 为RAW指令创建临时文件
+            temp_file_path = None
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.prn') as temp_file:
+                temp_file.write(commands)
+                temp_file_path = temp_file.name
+
+            try:
+                job_id = conn.printFile(
+                    self.printer_name,
+                    temp_file_path,
+                    "ESC/POS Receipt",
+                    {"document-format": "application/vnd.cups-raw"}
+                )
+                print(f"✓ ESC/POS CUPS打印成功: {self.printer_name} (作业ID: {job_id})")
+                return True
+            finally:
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+
+        except Exception as e:
+            if cups and hasattr(cups, 'IPPError') and isinstance(e, cups.IPPError):
+                print(f"✗ CUPS打印失败 (IPP错误): {e}")
+                return False
+            print(f"✗ ESC/POS CUPS打印失败: {e}")
             import traceback
             traceback.print_exc()
             return False
