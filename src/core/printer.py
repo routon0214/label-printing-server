@@ -330,6 +330,45 @@ class ZebraPrinter:
                     print(f"  [调试] 打印机状态: {printer_info.get('printer-state', 'N/A')}")
                     print(f"  [调试] 支持的格式: {printer_info.get('document-format-supported', [])}")
                 
+                # 优先尝试：如果可以从CUPS获取设备路径，直接使用设备路径（避免CUPS处理ZPL的问题）
+                device_path_to_try = self.device_path
+                if not device_path_to_try:
+                    try:
+                        printer_attrs = conn.getPrinterAttributes(self.printer_name)
+                        device_uri = printer_attrs.get('device-uri', '')
+                        print(f"  [调试] 打印机设备URI: {device_uri}")
+                        
+                        if device_uri.startswith('usb://'):
+                            # USB设备，尝试找到对应的/dev/usb/lp*设备
+                            import glob
+                            usb_devices = glob.glob('/dev/usb/lp*')
+                            print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
+                            if usb_devices:
+                                # 使用第一个USB设备
+                                device_path_to_try = usb_devices[0]
+                                print(f"  [调试] 从CUPS获取到USB设备: {device_path_to_try}")
+                                print(f"  [调试] 优先使用设备直接写入，避免CUPS处理ZPL的问题...")
+                                
+                                # 直接使用设备路径打印，完全跳过CUPS
+                                try:
+                                    # 临时设置设备路径
+                                    original_device_path = self.device_path
+                                    self.device_path = device_path_to_try
+                                    try:
+                                        result = self._print_device(zpl_code)
+                                        if result:
+                                            print(f"  ✓ 设备直接写入成功（跳过CUPS，避免重复打印）")
+                                            return True
+                                    finally:
+                                        self.device_path = original_device_path
+                                except Exception as device_error:
+                                    print(f"  [调试] 设备直接写入失败，回退到CUPS: {device_error}")
+                                    import traceback
+                                    traceback.print_exc()
+                                    # 如果设备写入失败，继续使用CUPS
+                    except Exception as uri_error:
+                        print(f"  [调试] 无法获取设备URI: {uri_error}")
+                
                 # 方法1: 使用空字典（标准方式）
                 print(f"  [方法1] 使用CUPS API (空字典)...")
                 try:
