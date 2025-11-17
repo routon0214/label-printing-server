@@ -295,6 +295,12 @@ class ESCPOSPrinter:
         print(f"  命令预览 (前32字节): {commands[:32].hex()}")
         print(f"  当前配置 - IP: {self.printer_ip}, 名称: {self.printer_name}, 设备: {self.device_path}")
         
+        # 调试信息：检查各个条件
+        print(f"  [调试] 系统检查: system='{self.system}', system=='Linux'={self.system == 'Linux'}")
+        print(f"  [调试] 名称检查: printer_name='{self.printer_name}', 类型={type(self.printer_name)}, 存在={bool(self.printer_name)}")
+        if self.printer_name:
+            print(f"  [调试] 名称strip后: '{self.printer_name.strip()}', 长度={len(self.printer_name.strip())}")
+        
         # 优先使用网络打印
         if self.printer_ip:
             print(f"  → 使用网络打印模式")
@@ -307,7 +313,13 @@ class ESCPOSPrinter:
 
         # Linux CUPS打印（使用打印机名称）
         # 检查printer_name是否有效（不是None且不是空字符串）
-        if self.system == 'Linux' and self.printer_name and self.printer_name.strip():
+        is_linux = self.system == 'Linux'
+        has_name = bool(self.printer_name)
+        has_valid_name = bool(self.printer_name and self.printer_name.strip()) if self.printer_name else False
+        
+        print(f"  [调试] Linux CUPS条件检查: is_linux={is_linux}, has_name={has_name}, has_valid_name={has_valid_name}")
+        
+        if is_linux and has_valid_name:
             print(f"  → 使用Linux CUPS打印模式")
             return self._send_cups(commands)
 
@@ -321,7 +333,7 @@ class ESCPOSPrinter:
         print(error_msg)
         print(f"  当前系统: {self.system}")
         print(f"  当前配置: IP={self.printer_ip}, 名称={self.printer_name}, 设备={self.device_path}")
-        print(f"  调试信息: system=='Linux'={self.system == 'Linux'}, printer_name存在={bool(self.printer_name)}, printer_name值='{self.printer_name}'")
+        print(f"  最终调试: system=='Linux'={self.system == 'Linux'}, printer_name存在={bool(self.printer_name)}, printer_name值='{self.printer_name}'")
         return False
     
     def _send_network(self, commands):
