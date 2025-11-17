@@ -14,6 +14,11 @@ from src.utils.fuzzy_match import find_best_printer, fuzzy_match_printer
 class ZebraPrinter:
     """斑马打印机类（跨平台）"""
     
+    # 类级别的打印锁，防止重复打印
+    _print_lock = None
+    _last_print_time = {}
+    _print_cooldown = 0.5  # 0.5秒冷却时间，防止重复打印
+    
     def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None):
         """
         初始化打印机
@@ -224,6 +229,34 @@ class ZebraPrinter:
         Returns:
             bool: 是否成功
         """
+        # 防重复打印：检查冷却时间
+        import time
+        import threading
+        
+        # 使用设备路径或打印机名称作为唯一标识
+        printer_id = self.device_path or self.printer_name or 'default'
+        current_time = time.time()
+        
+        if printer_id in self._last_print_time:
+            time_since_last = current_time - self._last_print_time[printer_id]
+            if time_since_last < self._print_cooldown:
+                print(f"  ⚠ 警告: 距离上次打印仅 {time_since_last:.2f} 秒，跳过本次打印以避免重复")
+                return True  # 返回True表示已处理（避免重复）
+        
+        # 更新最后打印时间
+        self._last_print_time[printer_id] = current_time
+        
+        # 检查ZPL代码中是否包含多个打印命令（多个^XZ）
+        xz_count = zpl_code.count('^XZ')
+        if xz_count > 1:
+            print(f"  ⚠ 警告: ZPL代码包含 {xz_count} 个打印命令（^XZ），可能导致重复打印")
+            print(f"  [调试] 只使用第一个打印命令，移除后续的^XZ...")
+            # 只保留第一个^XZ之前的内容，然后添加一个^XZ
+            first_xz_pos = zpl_code.find('^XZ')
+            if first_xz_pos >= 0:
+                zpl_code = zpl_code[:first_xz_pos + 3]  # 保留第一个^XZ
+                print(f"  [调试] 已清理ZPL代码，现在只包含1个打印命令")
+        
         # 优先使用网络打印（所有平台通用）
         if self.printer_ip:
             return self._print_network(zpl_code)
