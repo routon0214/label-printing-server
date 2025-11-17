@@ -330,6 +330,17 @@ class ZebraPrinter:
                     print(f"  [调试] 打印机状态: {printer_info.get('printer-state', 'N/A')}")
                     print(f"  [调试] 支持的格式: {printer_info.get('document-format-supported', [])}")
                 
+                # 检查ZPL代码中是否包含多个打印命令（多个^XZ）
+                xz_count = zpl_code.count('^XZ')
+                if xz_count > 1:
+                    print(f"  ⚠ 警告: ZPL代码包含 {xz_count} 个打印命令（^XZ），可能导致重复打印")
+                    print(f"  [调试] 只使用第一个打印命令，移除后续的^XZ...")
+                    # 只保留第一个^XZ之前的内容，然后添加一个^XZ
+                    first_xz_pos = zpl_code.find('^XZ')
+                    if first_xz_pos >= 0:
+                        zpl_code = zpl_code[:first_xz_pos + 3]  # 保留第一个^XZ
+                        print(f"  [调试] 已清理ZPL代码，现在只包含1个打印命令")
+                
                 # 优先尝试：如果可以从CUPS获取设备路径，直接使用设备路径（避免CUPS处理ZPL的问题）
                 device_path_to_try = self.device_path
                 if not device_path_to_try:
@@ -575,6 +586,17 @@ class ZebraPrinter:
             if not zpl_code or len(zpl_code) == 0:
                 print(f"[ERROR] ZPL设备打印失败: ZPL代码为空")
                 return False
+            
+            # 检查ZPL代码中是否包含多个打印命令（多个^XZ）
+            xz_count = zpl_code.count('^XZ')
+            if xz_count > 1:
+                print(f"  ⚠ 警告: ZPL代码包含 {xz_count} 个打印命令（^XZ），可能导致重复打印")
+                print(f"  [调试] 只使用第一个打印命令，移除后续的^XZ...")
+                # 只保留第一个^XZ之前的内容，然后添加一个^XZ
+                first_xz_pos = zpl_code.find('^XZ')
+                if first_xz_pos >= 0:
+                    zpl_code = zpl_code[:first_xz_pos + 3]  # 保留第一个^XZ
+                    print(f"  [调试] 已清理ZPL代码，现在只包含1个打印命令")
             
             print(f"  [调试] 准备发送ZPL代码到设备: {self.device_path}")
             print(f"  [调试] ZPL代码长度: {len(zpl_code)} 字符")
