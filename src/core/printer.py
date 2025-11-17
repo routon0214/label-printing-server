@@ -408,19 +408,72 @@ class ZebraPrinter:
                                 job_completed = True
                                 break
                         
-                        # 如果作业一直处于pending状态，只给出提示，不重复打印
-                        # 注意：不要在这里尝试直接写入设备，因为CUPS已经提交了打印作业
-                        # 如果CUPS打印失败，会在方法2（lp命令）或其他方法中处理
+                        # 如果作业一直处于pending状态，尝试直接写入设备（CUPS可能无法处理ZPL）
                         if not job_completed:
-                            print(f"  ⚠ 提示: 打印作业已提交但可能还在处理中，请检查打印机")
-                            print(f"  提示: 如果打印机没有反应，可以尝试:")
-                            print(f"    1. 检查CUPS打印队列: lpstat -p {self.printer_name}")
-                            print(f"    2. 检查打印作业: lpstat -o")
-                            print(f"    3. 检查打印机状态: lpstat -p {self.printer_name} -l")
+                            print(f"  ⚠ 警告: CUPS打印作业一直处于pending状态，可能无法处理ZPL代码")
+                            print(f"  [调试] 尝试直接写入设备以确保打印...")
+                            
+                            device_path_to_try = self.device_path
+                            
+                            # 如果没有配置设备路径，尝试从CUPS获取
+                            if not device_path_to_try:
+                                try:
+                                    printer_attrs = conn.getPrinterAttributes(self.printer_name)
+                                    device_uri = printer_attrs.get('device-uri', '')
+                                    print(f"  [调试] 打印机设备URI: {device_uri}")
+                                    
+                                    if device_uri.startswith('usb://'):
+                                        # USB设备，尝试找到对应的/dev/usb/lp*设备
+                                        import glob
+                                        usb_devices = glob.glob('/dev/usb/lp*')
+                                        print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
+                                        if usb_devices:
+                                            # 使用第一个USB设备
+                                            device_path_to_try = usb_devices[0]
+                                            print(f"  [调试] 尝试使用USB设备: {device_path_to_try}")
+                                except Exception as uri_error:
+                                    print(f"  [调试] 无法获取设备URI: {uri_error}")
+                            
+                            # 如果找到了设备路径，尝试直接写入设备
+                            if device_path_to_try:
+                                try:
+                                    # 先尝试取消CUPS打印作业，避免重复打印
+                                    try:
+                                        conn.cancelJob(job_id)
+                                        print(f"  [调试] 已取消CUPS打印作业 {job_id}，避免重复打印")
+                                    except Exception as cancel_error:
+                                        print(f"  [调试] 取消CUPS作业失败（可能已完成）: {cancel_error}")
+                                    
+                                    # 直接读取临时文件并写入设备
+                                    with open(temp_file_path, 'rb') as f:
+                                        zpl_bytes = f.read()
+                                    
+                                    # 解码为字符串，然后使用_print_device方法
+                                    zpl_code = zpl_bytes.decode('utf-8')
+                                    
+                                    # 临时设置设备路径并尝试打印
+                                    original_device_path = self.device_path
+                                    self.device_path = device_path_to_try
+                                    try:
+                                        result = self._print_device(zpl_code)
+                                        if result:
+                                            print(f"  ✓ 设备直接写入成功（已取消CUPS作业，避免重复打印）")
+                                            return True
+                                    finally:
+                                        self.device_path = original_device_path
+                                except Exception as device_error:
+                                    print(f"  [调试] 设备直接写入失败: {device_error}")
+                                    import traceback
+                                    traceback.print_exc()
+                            else:
+                                print(f"  ⚠ 无法找到设备路径，CUPS打印作业可能仍在队列中")
+                                print(f"  提示: 如果打印机没有反应，可以尝试:")
+                                print(f"    1. 检查CUPS打印队列: lpstat -p {self.printer_name}")
+                                print(f"    2. 检查打印作业: lpstat -o")
+                                print(f"    3. 检查打印机状态: lpstat -p {self.printer_name} -l")
+                                print(f"    4. 在配置中添加设备路径（device）以使用直接写入")
                         
-                        # CUPS打印作业已成功提交，返回True
-                        # 注意：即使作业状态不是completed，也不应该重复打印
-                        # 因为CUPS已经接受了作业，可能会在后台处理
+                        # 如果作业已完成或无法直接写入设备，返回True（CUPS已接受作业）
                         return True
                 except Exception as method1_error:
                     print(f"  [方法1失败] CUPS API失败: {method1_error}")
