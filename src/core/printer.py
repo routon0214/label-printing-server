@@ -295,27 +295,49 @@ class ZebraPrinter:
         try:
             import cups
             import tempfile
-            
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.zpl', delete=False) as f:
-                f.write(zpl_code)
-                temp_file = f.name
-            
-            # 通过CUPS打印
-            conn = cups.Connection()
-            conn.printFile(self.printer_name, temp_file, "Label Print", {})
-            
-            # 删除临时文件
-            os.remove(temp_file)
-            
-            print(f"[OK] CUPS打印成功: {self.printer_name}")
-            return True
-            
         except ImportError:
             print("提示：Linux建议安装 pycups: pip install pycups")
             return False
+        
+        try:
+            # 创建临时文件（使用二进制模式，因为ZPL可能包含特殊字符）
+            temp_file_path = None
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.zpl', delete=False) as f:
+                # ZPL代码需要编码为字节
+                f.write(zpl_code.encode('utf-8'))
+                temp_file_path = f.name
+            
+            try:
+                # 通过CUPS打印（使用空字典作为options，让CUPS自动处理RAW格式）
+                conn = cups.Connection()
+                job_id = conn.printFile(
+                    self.printer_name,
+                    temp_file_path,
+                    "ZPL Label Print",
+                    {}  # 空字典，让CUPS自动处理RAW格式
+                )
+                
+                # 检查作业ID（如果为0或None，表示失败）
+                if not job_id or job_id == 0:
+                    print(f"[ERROR] CUPS打印失败: 作业ID无效 ({job_id})")
+                    return False
+                
+                print(f"[OK] CUPS打印成功: {self.printer_name} (作业ID: {job_id})")
+                return True
+            finally:
+                # 删除临时文件
+                if temp_file_path and os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+            
         except Exception as e:
-            print(f"[ERROR] CUPS打印失败: {e}")
+            # 检查是否是IPPError
+            import cups
+            if hasattr(cups, 'IPPError') and isinstance(e, cups.IPPError):
+                print(f"[ERROR] CUPS打印失败 (IPP错误): {e}")
+            else:
+                print(f"[ERROR] CUPS打印失败: {e}")
+                import traceback
+                traceback.print_exc()
             return False
     
     def _print_device(self, zpl_code):
