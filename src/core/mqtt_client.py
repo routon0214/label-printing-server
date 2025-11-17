@@ -142,11 +142,25 @@ class LabelPrintMQTT:
                 elif print_type == 'label':
                     # 只有当该类型还没有专用打印机时才设置
                     if 'label' not in self.printer_map:
-                        self.printer_map['label'] = self._create_zebra_printer(printer_cfg)
+                        print(f"    [调试] 创建ZPL标签打印机:")
+                        print(f"      配置: {printer_cfg}")
+                        print(f"      名称: {printer_cfg.get('name')}")
+                        print(f"      IP: {printer_cfg.get('ip')}")
+                        print(f"      端口: {printer_cfg.get('port', 9100)}")
+                        print(f"      设备: {printer_cfg.get('device')}")
+                        label_printer = self._create_zebra_printer(printer_cfg)
+                        self.printer_map['label'] = label_printer
                         print(f"    [OK] 标签打印（专用） -> {name}")
+                        print(f"    [调试] 打印机实例创建成功:")
+                        print(f"      类型: {type(label_printer).__name__}")
+                        print(f"      系统: {label_printer.system}")
+                        print(f"      最终名称: {label_printer.printer_name}")
+                        print(f"      最终IP: {label_printer.printer_ip}")
+                        print(f"      最终设备: {label_printer.device_path}")
                         supported_formats.append('label(ZPL)')
                     else:
                         print(f"    [WARNING] 标签打印机已存在，跳过 {name}")
+                        print(f"    [调试] 已存在的标签打印机: {self.printer_map['label']}")
                 elif print_type == 'pdf':
                     if 'pdf' not in self.printer_map:
                         self.printer_map['pdf'] = self._create_pdf_printer(printer_cfg)
@@ -871,10 +885,16 @@ class LabelPrintMQTT:
                 zpl_code = None
                 
                 # 获取对应的打印机（优先专用，找不到用通用）
+                print(f"  [调试] 开始查找标签打印机...")
+                print(f"  [调试] 打印机映射: {list(self.printer_map.keys())}")
+                print(f"  [调试] 备选打印机配置: {self.fallback_printer_config}")
+                
                 label_printer = self._get_printer('label')
                 if not label_printer:
                     error_msg = "未配置标签打印机"
                     print(f"[ERROR] 错误：{error_msg}")
+                    print(f"  [调试] 打印机映射: {list(self.printer_map.keys())}")
+                    print(f"  [调试] 备选打印机配置: {self.fallback_printer_config}")
                     if logger:
                         logger.error(error_msg)
                     success = False
@@ -882,8 +902,22 @@ class LabelPrintMQTT:
                     # 判断是使用专用还是通用打印机
                     if 'label' in self.printer_map:
                         print("  使用: 标签专用打印机")
+                        print(f"  [调试] 打印机类型: {type(label_printer).__name__}")
+                        print(f"  [调试] 打印机配置:")
+                        print(f"    - 名称: {label_printer.printer_name}")
+                        print(f"    - IP: {label_printer.printer_ip}")
+                        print(f"    - 端口: {label_printer.printer_port}")
+                        print(f"    - 设备路径: {label_printer.device_path}")
+                        print(f"    - 系统: {label_printer.system}")
                     else:
                         print("  使用: 通用打印机（备选）")
+                        print(f"  [调试] 打印机类型: {type(label_printer).__name__}")
+                        print(f"  [调试] 打印机配置:")
+                        print(f"    - 名称: {label_printer.printer_name}")
+                        print(f"    - IP: {label_printer.printer_ip}")
+                        print(f"    - 端口: {label_printer.printer_port}")
+                        print(f"    - 设备路径: {label_printer.device_path}")
+                        print(f"    - 系统: {label_printer.system}")
                     
                     # 获取ZPL代码：使用标准化后的数据
                     try:

@@ -315,6 +315,20 @@ class PrintQueue:
                             printer: Any, task_data: Dict) -> bool:
         """执行标签打印"""
         try:
+            print(f"  [打印队列] 开始执行ZPL标签打印")
+            print(f"  [打印队列] 数据格式: {data_format}")
+            print(f"  [打印队列] 打印机类型: {type(printer).__name__}")
+            
+            # 检查打印机配置
+            if hasattr(printer, 'printer_name'):
+                print(f"  [打印队列] 打印机名称: {printer.printer_name}")
+            if hasattr(printer, 'printer_ip'):
+                print(f"  [打印队列] 打印机IP: {printer.printer_ip}")
+            if hasattr(printer, 'device_path'):
+                print(f"  [打印队列] 设备路径: {printer.device_path}")
+            if hasattr(printer, 'system'):
+                print(f"  [打印队列] 系统: {printer.system}")
+            
             # 导入需要的模块
             from src.utils.zpl_chinese_converter import detect_and_convert_zpl
             from src.core.zpl_generator import ZPLGenerator
@@ -324,6 +338,7 @@ class PrintQueue:
             if data_format == 'zpl':
                 # 直接ZPL代码
                 zpl_code = content
+                print(f"  [打印队列] 使用直接提供的ZPL代码，长度: {len(zpl_code) if zpl_code else 0} 字符")
                 zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
                 if was_converted:
                     print("  [OK] ZPL中文已转换为图像")
@@ -332,15 +347,23 @@ class PrintQueue:
                 # 结构化数据，生成ZPL
                 print("  [INFO] 从结构化数据生成ZPL...")
                 zpl_code = zpl_generator.generate_label_zpl(content)
+                print(f"  [打印队列] 生成的ZPL代码长度: {len(zpl_code) if zpl_code else 0} 字符")
             
             else:
                 print(f"  [错误] 不支持的标签格式: {data_format}")
                 return False
             
+            if not zpl_code:
+                print(f"  [错误] ZPL代码为空")
+                return False
+            
             print(f"  [INFO] ZPL代码长度: {len(zpl_code)} 字符")
+            print(f"  [打印队列] 准备调用 printer.print_label()...")
             
             # 执行打印
             result = printer.print_label(zpl_code)
+            
+            print(f"  [打印队列] 打印结果: {'成功' if result else '失败'}")
             return result
         
         except Exception as e:

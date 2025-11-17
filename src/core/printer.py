@@ -348,25 +348,123 @@ class ZebraPrinter:
                     else:
                         print(f"[OK] CUPS打印成功: {self.printer_name} (作业ID: {job_id})")
                         
-                        # 等待一小段时间，然后检查打印作业状态
+                        # 等待并检查打印作业状态
                         import time
-                        time.sleep(0.5)
                         
-                        try:
-                            # 获取打印作业信息
-                            job_info = conn.getJobAttributes(job_id)
-                            job_state = job_info.get('job-state', 'unknown')
-                            job_state_reasons = job_info.get('job-state-reasons', [])
+                        # CUPS作业状态码：
+                        # 3 = IPP_JOB_STATE_PENDING (等待处理)
+                        # 4 = IPP_JOB_STATE_HELD (暂停)
+                        # 5 = IPP_JOB_STATE_PROCESSING (处理中)
+                        # 6 = IPP_JOB_STATE_STOPPED (停止)
+                        # 7 = IPP_JOB_STATE_CANCELED (取消)
+                        # 8 = IPP_JOB_STATE_ABORTED (中止)
+                        # 9 = IPP_JOB_STATE_COMPLETED (完成)
+                        
+                        job_completed = False
+                        max_wait_time = 3.0  # 最多等待3秒
+                        check_interval = 0.5  # 每0.5秒检查一次
+                        waited_time = 0
+                        
+                        while waited_time < max_wait_time:
+                            time.sleep(check_interval)
+                            waited_time += check_interval
                             
-                            print(f"  [调试] 打印作业状态: {job_state}")
-                            if job_state_reasons:
-                                print(f"  [调试] 状态原因: {job_state_reasons}")
+                            try:
+                                # 获取打印作业信息
+                                job_info = conn.getJobAttributes(job_id)
+                                job_state = job_info.get('job-state', 'unknown')
+                                job_state_reasons = job_info.get('job-state-reasons', [])
+                                
+                                print(f"  [调试] 打印作业状态: {job_state} (等待 {waited_time:.1f}秒)")
+                                
+                                if job_state_reasons and job_state_reasons != ['none']:
+                                    print(f"  [调试] 状态原因: {job_state_reasons}")
+                                
+                                # 状态9表示完成
+                                if job_state == 9:
+                                    print(f"  ✓ 打印作业已完成")
+                                    job_completed = True
+                                    break
+                                # 状态5表示正在处理
+                                elif job_state == 5:
+                                    print(f"  [调试] 打印作业正在处理中...")
+                                    # 继续等待
+                                # 状态3表示等待处理
+                                elif job_state == 3:
+                                    print(f"  [调试] 打印作业等待处理中...")
+                                    # 继续等待
+                                # 其他状态可能是错误
+                                elif job_state in [4, 6, 7, 8]:
+                                    print(f"  ⚠ 警告: 打印作业状态异常: {job_state}")
+                                    if job_state_reasons:
+                                        print(f"    原因: {job_state_reasons}")
+                                    # 如果作业被暂停或停止，尝试其他方法
+                                    break
+                                    
+                            except Exception as status_error:
+                                # 如果无法获取作业状态，可能是作业已完成或被删除
+                                print(f"  [调试] 无法获取打印作业状态 (可能已完成): {status_error}")
+                                # 假设已完成，继续执行
+                                job_completed = True
+                                break
+                        
+                        # 如果作业一直处于pending状态，尝试直接写入设备
+                        if not job_completed:
+                            device_path_to_try = self.device_path
                             
-                            # 如果作业状态不是完成，给出提示
-                            if job_state != 9:  # 9 = completed
-                                print(f"  ⚠ 提示: 打印作业可能还在处理中，请检查打印机")
-                        except Exception as status_error:
-                            print(f"  [调试] 无法获取打印作业状态: {status_error}")
+                            # 如果没有配置设备路径，尝试从CUPS获取
+                            if not device_path_to_try:
+                                try:
+                                    printer_attrs = conn.getPrinterAttributes(self.printer_name)
+                                    device_uri = printer_attrs.get('device-uri', '')
+                                    print(f"  [调试] 打印机设备URI: {device_uri}")
+                                    
+                                    if device_uri.startswith('usb://'):
+                                        # USB设备，尝试找到对应的/dev/usb/lp*设备
+                                        import glob
+                                        usb_devices = glob.glob('/dev/usb/lp*')
+                                        print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
+                                        if usb_devices:
+                                            # 使用第一个USB设备
+                                            device_path_to_try = usb_devices[0]
+                                            print(f"  [调试] 尝试使用USB设备: {device_path_to_try}")
+                                except Exception as uri_error:
+                                    print(f"  [调试] 无法获取设备URI: {uri_error}")
+                            
+                            # 如果找到了设备路径，尝试直接写入
+                            if device_path_to_try:
+                                print(f"  [调试] 打印作业可能未完成，尝试直接写入设备: {device_path_to_try}")
+                                try:
+                                    # 直接读取临时文件并写入设备
+                                    with open(temp_file_path, 'rb') as f:
+                                        zpl_bytes = f.read()
+                                    
+                                    # 解码为字符串，然后使用_print_device方法
+                                    zpl_code = zpl_bytes.decode('utf-8')
+                                    
+                                    # 临时设置设备路径并尝试打印
+                                    original_device_path = self.device_path
+                                    self.device_path = device_path_to_try
+                                    try:
+                                        result = self._print_device(zpl_code)
+                                        if result:
+                                            print(f"  ✓ 设备直接写入成功")
+                                            return True
+                                    finally:
+                                        self.device_path = original_device_path
+                                except Exception as device_error:
+                                    print(f"  [调试] 设备直接写入失败: {device_error}")
+                                    import traceback
+                                    traceback.print_exc()
+                        
+                        # 即使作业状态不是完成，也返回True（因为CUPS已接受作业）
+                        # 实际打印可能由CUPS后台处理
+                        if not job_completed:
+                            print(f"  ⚠ 提示: 打印作业已提交但可能还在处理中，请检查打印机")
+                            print(f"  提示: 如果打印机没有反应，可以尝试:")
+                            print(f"    1. 检查CUPS打印队列: lpstat -p {self.printer_name}")
+                            print(f"    2. 检查打印作业: lpstat -o")
+                            print(f"    3. 如果配置了设备路径，尝试直接写入设备")
                         
                         return True
                 except Exception as method1_error:
