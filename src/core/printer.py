@@ -655,6 +655,9 @@ class ZebraPrinter:
             print(f"  [调试] ZPL字节长度: {len(zpl_bytes)} 字节")
             
             # 使用O_SYNC标志确保数据立即写入设备
+            bytes_written = 0
+            write_success = False
+            
             try:
                 # 以同步模式打开设备（O_SYNC确保数据立即写入）
                 fd = os.open(self.device_path, os.O_WRONLY | os.O_SYNC)
@@ -662,10 +665,14 @@ class ZebraPrinter:
                     # 写入数据
                     bytes_written = os.write(fd, zpl_bytes)
                     print(f"  [调试] 已写入 {bytes_written} 字节到文件描述符")
+                    write_success = True
                     
-                    # 使用fsync确保数据真正发送到设备
-                    os.fsync(fd)
-                    print(f"  [调试] 已调用fsync同步数据")
+                    # 使用fsync确保数据真正发送到设备（失败不影响，数据已写入）
+                    try:
+                        os.fsync(fd)
+                        print(f"  [调试] 已调用fsync同步数据")
+                    except Exception as sync_error:
+                        print(f"  [调试] fsync失败（数据已写入）: {sync_error}")
                     
                     print(f"[OK] ZPL设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
                     
@@ -677,23 +684,32 @@ class ZebraPrinter:
                 finally:
                     os.close(fd)
             except OSError as os_error:
-                # 如果O_SYNC失败，尝试普通方式
-                print(f"  [调试] O_SYNC模式失败，尝试普通模式: {os_error}")
-                with open(self.device_path, 'wb') as device:
-                    bytes_written = device.write(zpl_bytes)
-                    print(f"  [调试] 已写入 {bytes_written} 字节")
-                    device.flush()
-                    print(f"  [调试] 已调用flush")
-                    # 尝试同步
+                # 如果O_SYNC失败且数据未写入，尝试普通方式
+                if not write_success:
+                    print(f"  [调试] O_SYNC模式失败，尝试普通模式: {os_error}")
                     try:
-                        os.fsync(device.fileno())
-                        print(f"  [调试] 已调用fsync")
-                    except Exception as sync_error:
-                        print(f"  [调试] fsync失败: {sync_error}")
-                print(f"[OK] ZPL设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
-                import time
-                time.sleep(0.3)
-                return True
+                        with open(self.device_path, 'wb') as device:
+                            bytes_written = device.write(zpl_bytes)
+                            print(f"  [调试] 已写入 {bytes_written} 字节")
+                            device.flush()
+                            print(f"  [调试] 已调用flush")
+                            # 尝试同步（失败不影响，数据已写入）
+                            try:
+                                os.fsync(device.fileno())
+                                print(f"  [调试] 已调用fsync")
+                            except Exception as sync_error:
+                                print(f"  [调试] fsync失败（数据已写入）: {sync_error}")
+                        print(f"[OK] ZPL设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
+                        import time
+                        time.sleep(0.3)
+                        return True
+                    except Exception as fallback_error:
+                        print(f"  [调试] 普通模式也失败: {fallback_error}")
+                        raise
+                else:
+                    # 数据已写入，即使fsync失败也不应该再次写入
+                    print(f"  [调试] 数据已写入，跳过普通模式（避免重复写入）")
+                    return True
             
         except PermissionError:
             print(f"[ERROR] 权限不足: {self.device_path}")
