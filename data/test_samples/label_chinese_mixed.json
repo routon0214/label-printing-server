@@ -1,0 +1,16 @@
+{
+  "print_type": "label",
+  "format": "structured",
+  "content": {
+    "title": "Product 产品标签",
+    "fields": [
+      {"label": "Name", "value": "Component-A", "font_size": 28},
+      {"label": "名称", "value": "电子元件", "font_size": 28},
+      {"label": "Serial", "value": "SN-2025-001", "font_size": 25},
+      {"label": "日期", "value": "2025-11-17", "font_size": 22}
+    ],
+    "barcode": "SN2025001",
+    "qrcode": "SN2025001"
+  }
+}
+

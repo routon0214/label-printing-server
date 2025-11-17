@@ -1,0 +1,13 @@
+{
+  "print_type": "label",
+  "format": "structured",
+  "content": {
+    "title": "测试标签",
+    "fields": [
+      {"label": "产品", "value": "元件A", "font_size": 25},
+      {"label": "编号", "value": "NO-001", "font_size": 22}
+    ],
+    "barcode": "NO001"
+  }
+}
+

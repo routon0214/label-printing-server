@@ -29,13 +29,6 @@
       "file": "label_zpl_english.json"
     },
     {
-      "id": "deli_receipt",
-      "title": "ESC/POS小票（结构化）",
-      "desc": "使用结构化数据打印小票，包含商品列表和总价",
-      "category": "小票打印",
-      "file": "escpos_structured.json"
-    },
-    {
       "id": "deli_raw",
       "title": "ESC/POS小票（纯文本）",
       "desc": "使用纯文本内容打印，支持ZPL命令等原始文本",
