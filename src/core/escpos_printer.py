@@ -503,6 +503,11 @@ class ESCPOSPrinter:
             actual_printer_name = None
             if self.printer_name in printers:
                 actual_printer_name = self.printer_name
+                # 检查打印机信息
+                printer_info = printers[actual_printer_name]
+                print(f"  打印机信息: {printer_info.get('printer-info', 'N/A')}")
+                print(f"  打印机状态: {printer_info.get('printer-state', 'N/A')}")
+                print(f"  支持的格式: {printer_info.get('document-format-supported', [])}")
             else:
                 # 如果精确匹配失败，尝试模糊搜索（像旧代码那样）
                 print(f"  精确匹配失败，尝试模糊搜索: {self.printer_name}")
@@ -520,21 +525,85 @@ class ESCPOSPrinter:
                     print(f"  可用打印机: {', '.join(printers.keys()) or '无'}")
                     return False
 
-            # 为RAW指令创建临时文件
+            # 为RAW指令创建临时文件（使用二进制模式）
             temp_file_path = None
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.prn') as temp_file:
+            print(f"  [调试] 准备发送 {len(commands)} 字节的ESC/POS命令")
+            print(f"  [调试] 命令前16字节(hex): {commands[:16].hex()}")
+            print(f"  [调试] 命令前16字节(ascii): {repr(commands[:16])}")
+            
+            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.prn') as temp_file:
                 temp_file.write(commands)
                 temp_file_path = temp_file.name
+                print(f"  [调试] 临时文件已创建: {temp_file_path} ({len(commands)} 字节)")
 
             try:
-                # 使用空字典作为options（与旧代码保持一致）
-                job_id = conn.printFile(
-                    actual_printer_name,
-                    temp_file_path,
-                    "Raw Print Job",
-                    {}  # 空字典，让CUPS自动处理RAW格式
-                )
+                # 尝试使用RAW格式选项
+                # 先尝试指定文档格式为RAW
+                options = {
+                    'document-format': 'application/vnd.cups-raw'
+                }
+                
+                try:
+                    job_id = conn.printFile(
+                        actual_printer_name,
+                        temp_file_path,
+                        "ESC/POS Receipt",
+                        options
+                    )
+                except Exception as raw_error:
+                    # 如果RAW格式失败，尝试使用空字典（让CUPS自动检测）
+                    print(f"  [调试] RAW格式选项失败，尝试自动检测: {raw_error}")
+                    try:
+                        job_id = conn.printFile(
+                            actual_printer_name,
+                            temp_file_path,
+                            "ESC/POS Receipt",
+                            {}  # 空字典，让CUPS自动处理
+                        )
+                    except Exception as auto_error:
+                        # 如果CUPS API也失败，尝试使用lpr命令（备选方案）
+                        print(f"  [调试] CUPS API失败，尝试使用lpr命令: {auto_error}")
+                        import subprocess
+                        result = subprocess.run(
+                            ['lpr', '-P', actual_printer_name, '-o', 'raw', temp_file_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if result.returncode == 0:
+                            print(f"✓ ESC/POS lpr打印成功: {actual_printer_name}")
+                            return True
+                        else:
+                            print(f"✗ lpr打印失败: {result.stderr}")
+                            raise auto_error  # 重新抛出原始异常
+                
+                # 检查作业ID
+                if not job_id or job_id == 0:
+                    print(f"✗ CUPS打印失败: 作业ID无效 ({job_id})")
+                    return False
+                
                 print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
+                
+                # 等待一小段时间，然后检查打印作业状态
+                import time
+                time.sleep(0.5)
+                
+                try:
+                    # 获取打印作业信息
+                    job_info = conn.getJobAttributes(job_id)
+                    job_state = job_info.get('job-state', 'unknown')
+                    job_state_reasons = job_info.get('job-state-reasons', [])
+                    
+                    print(f"  打印作业状态: {job_state}")
+                    if job_state_reasons:
+                        print(f"  状态原因: {job_state_reasons}")
+                    
+                    # 如果作业状态不是完成，给出提示
+                    if job_state != 9:  # 9 = completed
+                        print(f"  ⚠ 提示: 打印作业可能还在处理中，请检查打印机")
+                except Exception as status_error:
+                    print(f"  [调试] 无法获取打印作业状态: {status_error}")
+                
                 return True
             finally:
                 if os.path.exists(temp_file_path):
