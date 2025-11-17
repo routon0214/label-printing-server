@@ -1,6 +1,13 @@
 {
   "examples": [
     {
+      "id": "zpl_small_mixed",
+      "title": "中英文小标签",
+      "desc": "简洁的中英文混合小标签，包含产品名称、编号和条形码",
+      "category": "标签打印",
+      "file": "label_zpl_small_mixed.json"
+    },
+    {
       "id": "zpl_chinese",
       "title": "ZPL代码含中文",
       "desc": "直接使用ZPL代码打印，包含中文内容（自动转换为图像）",
