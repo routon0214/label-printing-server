@@ -540,7 +540,9 @@ class ESCPOSPrinter:
 
             try:
                 # 方法0: 如果是USB设备，优先尝试直接写入（最可靠）
+                # 注意：如果方法0失败，会继续尝试其他方法
                 print(f"  [方法0] 检查是否为USB设备，尝试直接写入...")
+                method0_success = False
                 try:
                     printer_attrs = conn.getPrinterAttributes(actual_printer_name)
                     device_uri = printer_attrs.get('device-uri', '')
@@ -550,34 +552,42 @@ class ESCPOSPrinter:
                         # USB设备，尝试找到对应的/dev/usb/lp*设备
                         import glob
                         usb_devices = glob.glob('/dev/usb/lp*')
+                        print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
                         if usb_devices:
                             # 尝试所有USB打印机设备，找到匹配的
                             for device_path in usb_devices:
                                 try:
                                     print(f"  [调试] 尝试USB设备: {device_path}")
                                     with open(device_path, 'wb') as device:
-                                        device.write(commands)
+                                        bytes_written = device.write(commands)
                                         device.flush()
-                                    print(f"✓ ESC/POS直接写入设备成功: {device_path}")
+                                    print(f"✓ ESC/POS直接写入设备成功: {device_path} (已写入 {bytes_written} 字节)")
                                     import time
                                     time.sleep(0.5)
+                                    method0_success = True
                                     return True
                                 except PermissionError:
                                     print(f"  [调试] 权限不足，尝试下一个设备: {device_path}")
+                                    print(f"  提示: 可能需要运行 sudo chmod 666 {device_path} 或添加用户到lp组")
                                     continue
                                 except Exception as device_error:
                                     print(f"  [调试] 设备写入失败，尝试下一个: {device_error}")
                                     continue
+                            if not method0_success:
+                                print(f"  [方法0失败] 所有USB设备尝试都失败，继续尝试其他方法")
                         else:
-                            print(f"  [方法0跳过] 未找到USB设备文件")
+                            print(f"  [方法0跳过] 未找到USB设备文件，继续尝试其他方法")
                     else:
-                        print(f"  [方法0跳过] 非USB设备，URI: {device_uri}")
+                        print(f"  [方法0跳过] 非USB设备，URI: {device_uri}，继续尝试其他方法")
                 except Exception as uri_error:
-                    print(f"  [方法0跳过] 无法获取设备URI: {uri_error}")
+                    print(f"  [方法0跳过] 无法获取设备URI: {uri_error}，继续尝试其他方法")
                 
                 # 方法1: 使用CUPS API (空字典，与ZPL打印方式一致)
                 # ZPL打印使用这种方式可以工作，但ESC/POS可能被CUPS驱动处理
+                # 这是最重要的方法，因为ZPL可以工作，说明CUPS连接是正常的
                 print(f"  [方法1] 尝试使用CUPS API (空字典，与ZPL一致)...")
+                print(f"  [调试] 文件路径: {temp_file_path}")
+                print(f"  [调试] 文件大小: {len(commands)} 字节")
                 try:
                     job_id = conn.printFile(
                         actual_printer_name,
@@ -585,15 +595,20 @@ class ESCPOSPrinter:
                         "ESC/POS Receipt",
                         {}  # 空字典，让CUPS自动处理（与ZPL打印一致）
                     )
+                    print(f"  [调试] CUPS返回作业ID: {job_id}")
                     if job_id and job_id > 0:
                         print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
                         print(f"  ⚠ 注意: 如果打印机没有实际打印，可能是CUPS驱动处理了ESC/POS命令")
-                        print(f"  建议: 在配置中添加device路径，使用直接写入方式")
+                        print(f"  建议: 检查CUPS打印机配置，确保支持RAW格式")
                         import time
                         time.sleep(0.5)
                         return True
+                    else:
+                        print(f"  [方法1失败] 作业ID无效: {job_id}")
                 except Exception as cups_error:
                     print(f"  [方法1失败] CUPS API失败: {cups_error}")
+                    import traceback
+                    traceback.print_exc()
                 
                 # 方法2: 使用CUPS API with RAW格式 (application/vnd.cups-raw)
                 print(f"  [方法2] 尝试使用CUPS API (application/vnd.cups-raw)...")
