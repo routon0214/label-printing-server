@@ -526,51 +526,36 @@ class ESCPOSPrinter:
                     return False
 
             # 为RAW指令创建临时文件（使用二进制模式）
+            # 注意：ZPL使用.zpl扩展名，这里尝试使用.prn或.bin，让CUPS识别为RAW数据
             temp_file_path = None
             print(f"  [调试] 准备发送 {len(commands)} 字节的ESC/POS命令")
             print(f"  [调试] 命令前16字节(hex): {commands[:16].hex()}")
             print(f"  [调试] 命令前16字节(ascii): {repr(commands[:16])}")
             
-            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.prn') as temp_file:
+            # 尝试使用.bin扩展名，让CUPS识别为二进制RAW数据
+            with tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.bin') as temp_file:
                 temp_file.write(commands)
                 temp_file_path = temp_file.name
                 print(f"  [调试] 临时文件已创建: {temp_file_path} ({len(commands)} 字节)")
 
             try:
-                # 优先使用lpr命令直接发送RAW数据（绕过CUPS过滤器）
-                # 这是最可靠的方式，确保ESC/POS命令不被处理
-                print(f"  [方法1] 尝试使用lpr命令发送RAW数据...")
-                import subprocess
-                result = subprocess.run(
-                    ['lpr', '-P', actual_printer_name, '-o', 'raw', temp_file_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    print(f"✓ ESC/POS lpr打印成功: {actual_printer_name}")
-                    # 等待一下，检查打印是否真的执行
-                    import time
-                    time.sleep(1)
-                    return True
-                else:
-                    print(f"  [方法1失败] lpr命令失败: {result.stderr}")
-                    # 尝试方法1.5: 使用lpr without -o raw选项
-                    print(f"  [方法1.5] 尝试使用lpr命令 (无raw选项)...")
-                    result2 = subprocess.run(
-                        ['lpr', '-P', actual_printer_name, temp_file_path],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
+                # 方法1: 使用CUPS API (空字典，与ZPL打印方式一致)
+                # ZPL打印使用这种方式可以工作，所以ESC/POS也应该可以
+                print(f"  [方法1] 尝试使用CUPS API (空字典，与ZPL一致)...")
+                try:
+                    job_id = conn.printFile(
+                        actual_printer_name,
+                        temp_file_path,
+                        "ESC/POS Receipt",
+                        {}  # 空字典，让CUPS自动处理（与ZPL打印一致）
                     )
-                    if result2.returncode == 0:
-                        print(f"✓ ESC/POS lpr打印成功 (无raw选项): {actual_printer_name}")
+                    if job_id and job_id > 0:
+                        print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
                         import time
-                        time.sleep(1)
+                        time.sleep(0.5)
                         return True
-                    else:
-                        print(f"  [方法1.5失败] lpr命令失败: {result2.stderr}")
-                    # 继续尝试其他方法
+                except Exception as cups_error:
+                    print(f"  [方法1失败] CUPS API失败: {cups_error}")
                 
                 # 方法2: 使用CUPS API with RAW格式
                 print(f"  [方法2] 尝试使用CUPS API (RAW格式)...")
@@ -588,27 +573,59 @@ class ESCPOSPrinter:
                     if job_id and job_id > 0:
                         print(f"✓ ESC/POS CUPS打印成功 (RAW格式): {actual_printer_name} (作业ID: {job_id})")
                         import time
-                        time.sleep(1)
+                        time.sleep(0.5)
                         return True
                 except Exception as raw_error:
                     print(f"  [方法2失败] RAW格式选项失败: {raw_error}")
                 
-                # 方法3: 使用CUPS API (自动检测)
-                print(f"  [方法3] 尝试使用CUPS API (自动检测)...")
+                # 方法3: 尝试获取打印机设备路径，直接写入
+                print(f"  [方法3] 尝试获取打印机设备路径，直接写入...")
                 try:
-                    job_id = conn.printFile(
-                        actual_printer_name,
-                        temp_file_path,
-                        "ESC/POS Receipt",
-                        {}  # 空字典，让CUPS自动处理
-                    )
-                    if job_id and job_id > 0:
-                        print(f"✓ ESC/POS CUPS打印成功 (自动检测): {actual_printer_name} (作业ID: {job_id})")
-                        import time
-                        time.sleep(1)
-                        return True
-                except Exception as auto_error:
-                    print(f"  [方法3失败] CUPS API失败: {auto_error}")
+                    # 获取打印机的设备URI
+                    printer_attrs = conn.getPrinterAttributes(actual_printer_name)
+                    device_uri = printer_attrs.get('device-uri', '')
+                    print(f"  [调试] 打印机设备URI: {device_uri}")
+                    
+                    # 如果是USB设备，尝试解析设备路径
+                    if device_uri.startswith('usb://'):
+                        # USB设备，尝试找到对应的/dev/usb/lp*设备
+                        import glob
+                        usb_devices = glob.glob('/dev/usb/lp*')
+                        if usb_devices:
+                            # 尝试第一个USB打印机设备
+                            device_path = usb_devices[0]
+                            print(f"  [调试] 找到USB设备: {device_path}")
+                            try:
+                                with open(device_path, 'wb') as device:
+                                    device.write(commands)
+                                    device.flush()
+                                print(f"✓ ESC/POS直接写入设备成功: {device_path}")
+                                import time
+                                time.sleep(0.5)
+                                return True
+                            except PermissionError:
+                                print(f"  [方法3失败] 权限不足: {device_path}")
+                            except Exception as device_error:
+                                print(f"  [方法3失败] 设备写入失败: {device_error}")
+                except Exception as uri_error:
+                    print(f"  [方法3失败] 无法获取设备URI: {uri_error}")
+                
+                # 方法4: 使用lpr命令（最后备选方案）
+                print(f"  [方法4] 尝试使用lpr命令发送RAW数据...")
+                import subprocess
+                result = subprocess.run(
+                    ['lpr', '-P', actual_printer_name, '-o', 'raw', temp_file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    print(f"✓ ESC/POS lpr打印成功: {actual_printer_name}")
+                    import time
+                    time.sleep(0.5)
+                    return True
+                else:
+                    print(f"  [方法4失败] lpr命令失败: {result.stderr}")
                 
                 # 所有方法都失败
                 print(f"✗ 所有打印方法都失败")
