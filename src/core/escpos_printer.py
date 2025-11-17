@@ -306,17 +306,12 @@ class ESCPOSPrinter:
             print(f"  → 使用网络打印模式")
             return self._send_network(commands)
         
-        # Linux设备直连（优先于CUPS，更可靠）
-        if self.system == 'Linux' and self.device_path:
-            print(f"  → 使用Linux设备直连模式 (设备: {self.device_path})")
-            return self._send_device(commands)
-        
         # Windows打印
         if self.system == 'Windows' and self.printer_name:
             print(f"  → 使用Windows打印模式")
             return self._send_windows(commands)
 
-        # Linux CUPS打印（使用打印机名称）
+        # Linux CUPS打印（使用打印机名称，优先于设备直连，与老程序一致）
         # 检查printer_name是否有效（不是None且不是空字符串）
         if self.system == 'Linux':
             # 简化检查：只要printer_name不是None且不是空字符串，就尝试使用CUPS打印
@@ -325,6 +320,11 @@ class ESCPOSPrinter:
                 return self._send_cups(commands)
             else:
                 print(f"  [调试] Linux系统但printer_name无效: printer_name={self.printer_name}, 类型={type(self.printer_name)}")
+        
+        # Linux设备直连（备选方案，仅在无printer_name时使用）
+        if self.system == 'Linux' and self.device_path:
+            print(f"  → 使用Linux设备直连模式 (设备: {self.device_path})")
+            return self._send_device(commands)
         
         # 没有可用的配置
         error_msg = f"✗ 错误：未配置打印机（需要设置 printer_ip、printer_name 或 device_path）"
@@ -539,90 +539,22 @@ class ESCPOSPrinter:
                 print(f"  [调试] 临时文件已创建: {temp_file_path} ({len(commands)} 字节)")
 
             try:
-                # 方法0: 优先使用配置的设备路径，如果是USB设备也尝试直接写入（最可靠）
-                # 注意：如果方法0失败，会继续尝试其他方法
-                print(f"  [方法0] 检查设备路径和USB设备，尝试直接写入...")
-                method0_success = False
-                
-                # 优先使用配置的设备路径
-                if self.device_path:
-                    print(f"  [方法0] 使用配置的设备路径: {self.device_path}")
-                    try:
-                        with open(self.device_path, 'wb') as device:
-                            bytes_written = device.write(commands)
-                            device.flush()
-                        print(f"✓ ESC/POS直接写入设备成功: {self.device_path} (已写入 {bytes_written} 字节)")
-                        import time
-                        time.sleep(0.5)
-                        return True
-                    except PermissionError:
-                        print(f"  [方法0失败] 权限不足: {self.device_path}")
-                        print(f"  提示: 可能需要运行 sudo chmod 666 {self.device_path} 或添加用户到lp组")
-                    except FileNotFoundError:
-                        print(f"  [方法0失败] 设备不存在: {self.device_path}")
-                    except Exception as device_error:
-                        print(f"  [方法0失败] 设备写入失败: {device_error}")
-                
-                # 如果没有配置设备路径，尝试自动检测USB设备
-                if not self.device_path:
-                    try:
-                        printer_attrs = conn.getPrinterAttributes(actual_printer_name)
-                        device_uri = printer_attrs.get('device-uri', '')
-                        print(f"  [调试] 打印机设备URI: {device_uri}")
-                        
-                        if device_uri.startswith('usb://'):
-                            # USB设备，尝试找到对应的/dev/usb/lp*设备
-                            import glob
-                            usb_devices = glob.glob('/dev/usb/lp*')
-                            print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
-                            if usb_devices:
-                                # 尝试所有USB打印机设备，找到匹配的
-                                for device_path in usb_devices:
-                                    try:
-                                        print(f"  [调试] 尝试USB设备: {device_path}")
-                                        with open(device_path, 'wb') as device:
-                                            bytes_written = device.write(commands)
-                                            device.flush()
-                                        print(f"✓ ESC/POS直接写入设备成功: {device_path} (已写入 {bytes_written} 字节)")
-                                        print(f"  ⚠ 提示: 建议在配置中添加 device: '{device_path}' 以使用指定设备")
-                                        import time
-                                        time.sleep(0.5)
-                                        method0_success = True
-                                        return True
-                                    except PermissionError:
-                                        print(f"  [调试] 权限不足，尝试下一个设备: {device_path}")
-                                        print(f"  提示: 可能需要运行 sudo chmod 666 {device_path} 或添加用户到lp组")
-                                        continue
-                                    except Exception as device_error:
-                                        print(f"  [调试] 设备写入失败，尝试下一个: {device_error}")
-                                        continue
-                                if not method0_success:
-                                    print(f"  [方法0失败] 所有USB设备尝试都失败，继续尝试其他方法")
-                            else:
-                                print(f"  [方法0跳过] 未找到USB设备文件，继续尝试其他方法")
-                        else:
-                            print(f"  [方法0跳过] 非USB设备，URI: {device_uri}，继续尝试其他方法")
-                    except Exception as uri_error:
-                        print(f"  [方法0跳过] 无法获取设备URI: {uri_error}，继续尝试其他方法")
-                
-                # 方法1: 使用CUPS API (空字典，与ZPL打印方式一致)
-                # ZPL打印使用这种方式可以工作，但ESC/POS可能被CUPS驱动处理
-                # 这是最重要的方法，因为ZPL可以工作，说明CUPS连接是正常的
-                print(f"  [方法1] 尝试使用CUPS API (空字典，与ZPL一致)...")
+                # 方法1: 使用CUPS API (空字典，与老程序完全一致)
+                # 老程序使用这种方式可以正常工作，所以这是最优先的方法
+                print(f"  [方法1] 使用CUPS API (与老程序一致)...")
                 print(f"  [调试] 文件路径: {temp_file_path}")
                 print(f"  [调试] 文件大小: {len(commands)} 字节")
                 try:
+                    # 完全按照老程序的方式：4个参数，空字典options
                     job_id = conn.printFile(
                         actual_printer_name,
                         temp_file_path,
-                        "ESC/POS Receipt",
-                        {}  # 空字典，让CUPS自动处理（与ZPL打印一致）
+                        "Raw Print Job",  # 与老程序使用相同的作业名称
+                        {}  # 空字典，与老程序一致
                     )
                     print(f"  [调试] CUPS返回作业ID: {job_id}")
                     if job_id and job_id > 0:
                         print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
-                        print(f"  ⚠ 注意: 如果打印机没有实际打印，可能是CUPS驱动处理了ESC/POS命令")
-                        print(f"  建议: 检查CUPS打印机配置，确保支持RAW格式")
                         import time
                         time.sleep(0.5)
                         return True
@@ -764,19 +696,71 @@ class ESCPOSPrinter:
                 return False
             
             print(f"  准备发送 {len(commands)} 字节到设备: {self.device_path}")
-            with open(self.device_path, 'wb') as device:
-                bytes_written = device.write(commands)
-                device.flush()  # 确保数据写入
             
-            print(f"✓ ESC/POS设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
-            return True
+            # 验证设备是否存在且可写
+            import os
+            import stat
+            if not os.path.exists(self.device_path):
+                print(f"✗ 设备不存在: {self.device_path}")
+                return False
+            
+            # 检查设备类型
+            try:
+                device_stat = os.stat(self.device_path)
+                if not stat.S_ISCHR(device_stat.st_mode):
+                    print(f"✗ 不是字符设备: {self.device_path}")
+                    return False
+            except Exception as stat_error:
+                print(f"  [调试] 无法获取设备信息: {stat_error}")
+            
+            # 使用O_SYNC标志确保数据立即写入设备
+            try:
+                # 以同步模式打开设备（O_SYNC确保数据立即写入）
+                fd = os.open(self.device_path, os.O_WRONLY | os.O_SYNC)
+                try:
+                    # 写入数据
+                    bytes_written = os.write(fd, commands)
+                    print(f"  [调试] 已写入 {bytes_written} 字节到文件描述符")
+                    
+                    # 使用fsync确保数据真正发送到设备
+                    os.fsync(fd)
+                    print(f"  [调试] 已调用fsync同步数据")
+                    
+                    print(f"✓ ESC/POS设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
+                    
+                    # 等待一小段时间，确保数据发送完成
+                    import time
+                    time.sleep(0.3)
+                    
+                    return True
+                finally:
+                    os.close(fd)
+            except OSError as os_error:
+                # 如果O_SYNC失败，尝试普通方式
+                print(f"  [调试] O_SYNC模式失败，尝试普通模式: {os_error}")
+                with open(self.device_path, 'wb') as device:
+                    bytes_written = device.write(commands)
+                    print(f"  [调试] 已写入 {bytes_written} 字节")
+                    device.flush()
+                    print(f"  [调试] 已调用flush")
+                    # 尝试同步
+                    try:
+                        os.fsync(device.fileno())
+                        print(f"  [调试] 已调用fsync")
+                    except Exception as sync_error:
+                        print(f"  [调试] fsync失败: {sync_error}")
+                print(f"✓ ESC/POS设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
+                import time
+                time.sleep(0.3)
+                return True
             
         except PermissionError:
             print(f"✗ 权限不足: {self.device_path}")
-            print(f"提示：sudo chmod 666 {self.device_path}")
+            print(f"提示：sudo chmod 666 {self.device_path} 或添加用户到lp组: sudo usermod -a -G lp $USER")
             return False
         except FileNotFoundError:
             print(f"✗ 设备不存在: {self.device_path}")
+            print(f"提示: 检查设备路径是否正确，可以使用 ls -l /dev/usb/lp* 查看可用设备")
             return False
         except Exception as e:
             print(f"✗ ESC/POS设备打印失败: {e}")
