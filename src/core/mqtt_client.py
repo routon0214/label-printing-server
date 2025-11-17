@@ -156,6 +156,9 @@ class LabelPrintMQTT:
                         print(f"    [WARNING] PDF打印机已存在，跳过 {name}")
                 elif print_type in ['receipt', 'escpos']:
                     if not receipt_configured and 'receipt' not in self.printer_map:
+                        print(f"    [调试] 创建ESC/POS打印机，类型: {print_type}")
+                        print(f"    [调试] 使用的配置: {printer_cfg}")
+                        print(f"    [调试] 配置中的name字段: {printer_cfg.get('name')}")
                         self.printer_map['receipt'] = self._create_escpos_printer(printer_cfg)
                         self.printer_map['escpos'] = self.printer_map['receipt']
                         print(f"    [OK] 小票打印（专用） -> {name}")
@@ -188,10 +191,13 @@ class LabelPrintMQTT:
         """
         # 1. 优先查找专用打印机
         if print_type in self.printer_map:
+            print(f"  [打印机选择] 使用专用打印机: {print_type}")
             return self.printer_map[print_type]
         
         # 2. 如果没有专用打印机，使用备选打印机
         if self.fallback_printer_config:
+            print(f"  [打印机选择] 未找到专用打印机，使用备选打印机配置")
+            print(f"  [打印机选择] 备选配置: {self.fallback_printer_config}")
             # 检查是否已经创建过该类型的备选打印机实例
             if print_type not in self.fallback_printers:
                 # 创建备选打印机实例
@@ -207,6 +213,7 @@ class LabelPrintMQTT:
             return self.fallback_printers.get(print_type)
         
         # 3. 没有找到任何打印机
+        print(f"  [打印机选择] 未找到任何打印机配置")
         return None
     
     def _init_single_printer(self, printer_config):
@@ -262,10 +269,17 @@ class LabelPrintMQTT:
         device_path = cfg.get('device')
         
         print(f"  创建ESC/POS打印机实例:")
+        print(f"    完整配置: {cfg}")
         print(f"    IP: {printer_ip}")
         print(f"    端口: {printer_port}")
-        print(f"    名称: {printer_name}")
+        print(f"    名称: {printer_name} (类型: {type(printer_name)})")
         print(f"    设备: {device_path}")
+        
+        # 验证配置：至少需要有一个连接方式
+        if not printer_ip and not printer_name and not device_path:
+            print(f"  ⚠ 警告: ESC/POS打印机配置不完整，所有连接方式都未设置")
+            print(f"    配置内容: {cfg}")
+            print(f"    提示: 需要至少配置 ip、name 或 device 之一")
         
         return ESCPOSPrinter(
             printer_ip=printer_ip,
@@ -733,10 +747,21 @@ class LabelPrintMQTT:
                     logger.info("开始处理ESC/POS小票打印任务")
                 
                 # 获取对应的打印机（优先专用，找不到用通用）
-                receipt_printer = self._get_printer('receipt')
+                # 先尝试使用 print_type 本身，如果找不到再尝试 'receipt'
+                receipt_printer = self._get_printer(print_type)
+                if not receipt_printer:
+                    # 如果 print_type 是 'escpos' 但找不到，尝试 'receipt'
+                    if print_type == 'escpos':
+                        receipt_printer = self._get_printer('receipt')
+                    elif print_type == 'receipt':
+                        receipt_printer = self._get_printer('escpos')
+                
                 if not receipt_printer:
                     error_msg = "未配置ESC/POS打印机"
                     print(f"[ERROR] 错误：{error_msg}")
+                    print(f"  尝试的打印类型: {print_type}")
+                    print(f"  可用的打印机映射: {list(self.printer_map.keys())}")
+                    print(f"  备选打印机配置: {self.fallback_printer_config}")
                     if logger:
                         logger.error(error_msg)
                     success = False
