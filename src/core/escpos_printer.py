@@ -487,10 +487,26 @@ class ESCPOSPrinter:
             conn = cups.Connection()
             printers = conn.getPrinters()
 
-            if self.printer_name not in printers:
-                print(f"✗ CUPS中未找到打印机: {self.printer_name}")
-                print(f"  可用打印机: {', '.join(printers.keys()) or '无'}")
-                return False
+            # 首先尝试精确匹配
+            actual_printer_name = None
+            if self.printer_name in printers:
+                actual_printer_name = self.printer_name
+            else:
+                # 如果精确匹配失败，尝试模糊搜索（像旧代码那样）
+                print(f"  精确匹配失败，尝试模糊搜索: {self.printer_name}")
+                keyword_lower = self.printer_name.lower()
+                matched_printers = []
+                for printer_name in printers.keys():
+                    if keyword_lower in printer_name.lower():
+                        matched_printers.append(printer_name)
+                
+                if matched_printers:
+                    actual_printer_name = matched_printers[0]
+                    print(f"  ✓ 找到匹配的打印机: {actual_printer_name}")
+                else:
+                    print(f"✗ CUPS中未找到打印机: {self.printer_name}")
+                    print(f"  可用打印机: {', '.join(printers.keys()) or '无'}")
+                    return False
 
             # 为RAW指令创建临时文件
             temp_file_path = None
@@ -499,13 +515,14 @@ class ESCPOSPrinter:
                 temp_file_path = temp_file.name
 
             try:
+                # 使用空字典作为options（与旧代码保持一致）
                 job_id = conn.printFile(
-                    self.printer_name,
+                    actual_printer_name,
                     temp_file_path,
-                    "ESC/POS Receipt",
-                    {"document-format": "application/vnd.cups-raw"}
+                    "Raw Print Job",
+                    {}  # 空字典，让CUPS自动处理RAW格式
                 )
-                print(f"✓ ESC/POS CUPS打印成功: {self.printer_name} (作业ID: {job_id})")
+                print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
                 return True
             finally:
                 if os.path.exists(temp_file_path):
