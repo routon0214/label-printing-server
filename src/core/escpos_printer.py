@@ -306,7 +306,8 @@ class ESCPOSPrinter:
             return self._send_windows(commands)
 
         # Linux CUPS打印（使用打印机名称）
-        if self.system == 'Linux' and self.printer_name:
+        # 检查printer_name是否有效（不是None且不是空字符串）
+        if self.system == 'Linux' and self.printer_name and self.printer_name.strip():
             print(f"  → 使用Linux CUPS打印模式")
             return self._send_cups(commands)
 
@@ -320,6 +321,7 @@ class ESCPOSPrinter:
         print(error_msg)
         print(f"  当前系统: {self.system}")
         print(f"  当前配置: IP={self.printer_ip}, 名称={self.printer_name}, 设备={self.device_path}")
+        print(f"  调试信息: system=='Linux'={self.system == 'Linux'}, printer_name存在={bool(self.printer_name)}, printer_name值='{self.printer_name}'")
         return False
     
     def _send_network(self, commands):
