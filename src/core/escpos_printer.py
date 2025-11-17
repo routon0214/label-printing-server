@@ -539,8 +539,44 @@ class ESCPOSPrinter:
                 print(f"  [调试] 临时文件已创建: {temp_file_path} ({len(commands)} 字节)")
 
             try:
+                # 方法0: 如果是USB设备，优先尝试直接写入（最可靠）
+                print(f"  [方法0] 检查是否为USB设备，尝试直接写入...")
+                try:
+                    printer_attrs = conn.getPrinterAttributes(actual_printer_name)
+                    device_uri = printer_attrs.get('device-uri', '')
+                    print(f"  [调试] 打印机设备URI: {device_uri}")
+                    
+                    if device_uri.startswith('usb://'):
+                        # USB设备，尝试找到对应的/dev/usb/lp*设备
+                        import glob
+                        usb_devices = glob.glob('/dev/usb/lp*')
+                        if usb_devices:
+                            # 尝试所有USB打印机设备，找到匹配的
+                            for device_path in usb_devices:
+                                try:
+                                    print(f"  [调试] 尝试USB设备: {device_path}")
+                                    with open(device_path, 'wb') as device:
+                                        device.write(commands)
+                                        device.flush()
+                                    print(f"✓ ESC/POS直接写入设备成功: {device_path}")
+                                    import time
+                                    time.sleep(0.5)
+                                    return True
+                                except PermissionError:
+                                    print(f"  [调试] 权限不足，尝试下一个设备: {device_path}")
+                                    continue
+                                except Exception as device_error:
+                                    print(f"  [调试] 设备写入失败，尝试下一个: {device_error}")
+                                    continue
+                        else:
+                            print(f"  [方法0跳过] 未找到USB设备文件")
+                    else:
+                        print(f"  [方法0跳过] 非USB设备，URI: {device_uri}")
+                except Exception as uri_error:
+                    print(f"  [方法0跳过] 无法获取设备URI: {uri_error}")
+                
                 # 方法1: 使用CUPS API (空字典，与ZPL打印方式一致)
-                # ZPL打印使用这种方式可以工作，所以ESC/POS也应该可以
+                # ZPL打印使用这种方式可以工作，但ESC/POS可能被CUPS驱动处理
                 print(f"  [方法1] 尝试使用CUPS API (空字典，与ZPL一致)...")
                 try:
                     job_id = conn.printFile(
@@ -551,6 +587,8 @@ class ESCPOSPrinter:
                     )
                     if job_id and job_id > 0:
                         print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
+                        print(f"  ⚠ 注意: 如果打印机没有实际打印，可能是CUPS驱动处理了ESC/POS命令")
+                        print(f"  建议: 在配置中添加device路径，使用直接写入方式")
                         import time
                         time.sleep(0.5)
                         return True
