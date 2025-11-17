@@ -313,15 +313,13 @@ class ESCPOSPrinter:
 
         # Linux CUPS打印（使用打印机名称）
         # 检查printer_name是否有效（不是None且不是空字符串）
-        is_linux = self.system == 'Linux'
-        has_name = bool(self.printer_name)
-        has_valid_name = bool(self.printer_name and self.printer_name.strip()) if self.printer_name else False
-        
-        print(f"  [调试] Linux CUPS条件检查: is_linux={is_linux}, has_name={has_name}, has_valid_name={has_valid_name}")
-        
-        if is_linux and has_valid_name:
-            print(f"  → 使用Linux CUPS打印模式")
-            return self._send_cups(commands)
+        if self.system == 'Linux':
+            # 简化检查：只要printer_name不是None且不是空字符串，就尝试使用CUPS打印
+            if self.printer_name and isinstance(self.printer_name, str) and self.printer_name.strip():
+                print(f"  → 使用Linux CUPS打印模式 (打印机: {self.printer_name})")
+                return self._send_cups(commands)
+            else:
+                print(f"  [调试] Linux系统但printer_name无效: printer_name={self.printer_name}, 类型={type(self.printer_name)}")
 
         # Linux设备直连
         if self.system == 'Linux' and self.device_path:
