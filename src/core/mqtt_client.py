@@ -842,6 +842,9 @@ class LabelPrintMQTT:
                 if logger:
                     logger.info("开始处理ZPL标签打印任务")
                 
+                # 初始化变量
+                zpl_code = None
+                
                 # 获取对应的打印机（优先专用，找不到用通用）
                 label_printer = self._get_printer('label')
                 if not label_printer:
