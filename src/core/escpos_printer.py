@@ -537,8 +537,43 @@ class ESCPOSPrinter:
                 print(f"  [调试] 临时文件已创建: {temp_file_path} ({len(commands)} 字节)")
 
             try:
-                # 尝试使用RAW格式选项
-                # 先尝试指定文档格式为RAW
+                # 优先使用lpr命令直接发送RAW数据（绕过CUPS过滤器）
+                # 这是最可靠的方式，确保ESC/POS命令不被处理
+                print(f"  [方法1] 尝试使用lpr命令发送RAW数据...")
+                import subprocess
+                result = subprocess.run(
+                    ['lpr', '-P', actual_printer_name, '-o', 'raw', temp_file_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    print(f"✓ ESC/POS lpr打印成功: {actual_printer_name}")
+                    # 等待一下，检查打印是否真的执行
+                    import time
+                    time.sleep(1)
+                    return True
+                else:
+                    print(f"  [方法1失败] lpr命令失败: {result.stderr}")
+                    # 尝试方法1.5: 使用lpr without -o raw选项
+                    print(f"  [方法1.5] 尝试使用lpr命令 (无raw选项)...")
+                    result2 = subprocess.run(
+                        ['lpr', '-P', actual_printer_name, temp_file_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if result2.returncode == 0:
+                        print(f"✓ ESC/POS lpr打印成功 (无raw选项): {actual_printer_name}")
+                        import time
+                        time.sleep(1)
+                        return True
+                    else:
+                        print(f"  [方法1.5失败] lpr命令失败: {result2.stderr}")
+                    # 继续尝试其他方法
+                
+                # 方法2: 使用CUPS API with RAW格式
+                print(f"  [方法2] 尝试使用CUPS API (RAW格式)...")
                 options = {
                     'document-format': 'application/vnd.cups-raw'
                 }
@@ -550,61 +585,34 @@ class ESCPOSPrinter:
                         "ESC/POS Receipt",
                         options
                     )
+                    if job_id and job_id > 0:
+                        print(f"✓ ESC/POS CUPS打印成功 (RAW格式): {actual_printer_name} (作业ID: {job_id})")
+                        import time
+                        time.sleep(1)
+                        return True
                 except Exception as raw_error:
-                    # 如果RAW格式失败，尝试使用空字典（让CUPS自动检测）
-                    print(f"  [调试] RAW格式选项失败，尝试自动检测: {raw_error}")
-                    try:
-                        job_id = conn.printFile(
-                            actual_printer_name,
-                            temp_file_path,
-                            "ESC/POS Receipt",
-                            {}  # 空字典，让CUPS自动处理
-                        )
-                    except Exception as auto_error:
-                        # 如果CUPS API也失败，尝试使用lpr命令（备选方案）
-                        print(f"  [调试] CUPS API失败，尝试使用lpr命令: {auto_error}")
-                        import subprocess
-                        result = subprocess.run(
-                            ['lpr', '-P', actual_printer_name, '-o', 'raw', temp_file_path],
-                            capture_output=True,
-                            text=True,
-                            timeout=10
-                        )
-                        if result.returncode == 0:
-                            print(f"✓ ESC/POS lpr打印成功: {actual_printer_name}")
-                            return True
-                        else:
-                            print(f"✗ lpr打印失败: {result.stderr}")
-                            raise auto_error  # 重新抛出原始异常
+                    print(f"  [方法2失败] RAW格式选项失败: {raw_error}")
                 
-                # 检查作业ID
-                if not job_id or job_id == 0:
-                    print(f"✗ CUPS打印失败: 作业ID无效 ({job_id})")
-                    return False
-                
-                print(f"✓ ESC/POS CUPS打印成功: {actual_printer_name} (作业ID: {job_id})")
-                
-                # 等待一小段时间，然后检查打印作业状态
-                import time
-                time.sleep(0.5)
-                
+                # 方法3: 使用CUPS API (自动检测)
+                print(f"  [方法3] 尝试使用CUPS API (自动检测)...")
                 try:
-                    # 获取打印作业信息
-                    job_info = conn.getJobAttributes(job_id)
-                    job_state = job_info.get('job-state', 'unknown')
-                    job_state_reasons = job_info.get('job-state-reasons', [])
-                    
-                    print(f"  打印作业状态: {job_state}")
-                    if job_state_reasons:
-                        print(f"  状态原因: {job_state_reasons}")
-                    
-                    # 如果作业状态不是完成，给出提示
-                    if job_state != 9:  # 9 = completed
-                        print(f"  ⚠ 提示: 打印作业可能还在处理中，请检查打印机")
-                except Exception as status_error:
-                    print(f"  [调试] 无法获取打印作业状态: {status_error}")
+                    job_id = conn.printFile(
+                        actual_printer_name,
+                        temp_file_path,
+                        "ESC/POS Receipt",
+                        {}  # 空字典，让CUPS自动处理
+                    )
+                    if job_id and job_id > 0:
+                        print(f"✓ ESC/POS CUPS打印成功 (自动检测): {actual_printer_name} (作业ID: {job_id})")
+                        import time
+                        time.sleep(1)
+                        return True
+                except Exception as auto_error:
+                    print(f"  [方法3失败] CUPS API失败: {auto_error}")
                 
-                return True
+                # 所有方法都失败
+                print(f"✗ 所有打印方法都失败")
+                return False
             finally:
                 if os.path.exists(temp_file_path):
                     os.remove(temp_file_path)
