@@ -361,9 +361,10 @@ class ZebraPrinter:
                         # 9 = IPP_JOB_STATE_COMPLETED (完成)
                         
                         job_completed = False
-                        max_wait_time = 3.0  # 最多等待3秒
-                        check_interval = 0.5  # 每0.5秒检查一次
+                        max_wait_time = 2.0  # 最多等待2秒
+                        check_interval = 0.3  # 每0.3秒检查一次
                         waited_time = 0
+                        pending_count = 0  # 记录pending状态的次数
                         
                         while waited_time < max_wait_time:
                             time.sleep(check_interval)
@@ -385,14 +386,32 @@ class ZebraPrinter:
                                     print(f"  ✓ 打印作业已完成")
                                     job_completed = True
                                     break
-                                # 状态5表示正在处理
+                                # 状态5表示正在处理（可能已经开始打印，立即取消）
                                 elif job_state == 5:
-                                    print(f"  [调试] 打印作业正在处理中...")
-                                    # 继续等待
+                                    print(f"  ⚠ 警告: 打印作业正在处理中，可能已经开始打印")
+                                    print(f"  [调试] 立即取消CUPS作业，避免重复打印...")
+                                    try:
+                                        conn.cancelJob(job_id)
+                                        print(f"  [调试] 已取消CUPS打印作业 {job_id}")
+                                    except Exception as cancel_error:
+                                        print(f"  [调试] 取消CUPS作业失败: {cancel_error}")
+                                    # 标记为未完成，后续会尝试直接写入设备
+                                    break
                                 # 状态3表示等待处理
                                 elif job_state == 3:
-                                    print(f"  [调试] 打印作业等待处理中...")
-                                    # 继续等待
+                                    pending_count += 1
+                                    print(f"  [调试] 打印作业等待处理中... (pending {pending_count}次)")
+                                    # 如果pending超过1次（约0.3秒），立即取消并切换到直接写入
+                                    # 因为ZPL代码通常CUPS无法处理，等待时间越长越可能已经开始处理
+                                    if pending_count >= 1:
+                                        print(f"  ⚠ 警告: 打印作业一直pending，可能CUPS无法处理ZPL")
+                                        print(f"  [调试] 立即取消CUPS作业，切换到直接写入设备...")
+                                        try:
+                                            conn.cancelJob(job_id)
+                                            print(f"  [调试] 已取消CUPS打印作业 {job_id}")
+                                        except Exception as cancel_error:
+                                            print(f"  [调试] 取消CUPS作业失败: {cancel_error}")
+                                        break
                                 # 其他状态可能是错误
                                 elif job_state in [4, 6, 7, 8]:
                                     print(f"  ⚠ 警告: 打印作业状态异常: {job_state}")
@@ -408,7 +427,7 @@ class ZebraPrinter:
                                 job_completed = True
                                 break
                         
-                        # 如果作业一直处于pending状态，尝试直接写入设备（CUPS可能无法处理ZPL）
+                        # 如果作业未完成或一直pending，尝试直接写入设备（CUPS可能无法处理ZPL）
                         if not job_completed:
                             print(f"  ⚠ 警告: CUPS打印作业一直处于pending状态，可能无法处理ZPL代码")
                             print(f"  [调试] 尝试直接写入设备以确保打印...")
@@ -437,13 +456,7 @@ class ZebraPrinter:
                             # 如果找到了设备路径，尝试直接写入设备
                             if device_path_to_try:
                                 try:
-                                    # 先尝试取消CUPS打印作业，避免重复打印
-                                    try:
-                                        conn.cancelJob(job_id)
-                                        print(f"  [调试] 已取消CUPS打印作业 {job_id}，避免重复打印")
-                                    except Exception as cancel_error:
-                                        print(f"  [调试] 取消CUPS作业失败（可能已完成）: {cancel_error}")
-                                    
+                                    # 注意：CUPS作业可能已经在pending检测时被取消了
                                     # 直接读取临时文件并写入设备
                                     with open(temp_file_path, 'rb') as f:
                                         zpl_bytes = f.read()
