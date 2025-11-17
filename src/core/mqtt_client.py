@@ -957,16 +957,41 @@ class LabelPrintMQTT:
                                 logger.error(error_msg)
                             success = False
                         else:
-                            # 打印
+                            # 使用统一的打印队列处理（传入标准化后的数据）
                             try:
-                                success = label_printer.print_label(zpl_code)
+                                from src.utils.print_queue import get_print_queue
+                                print_queue = get_print_queue()
+                                
+                                # 将任务添加到打印队列（使用标准化后的数据）
+                                task_id = print_queue.add_task(normalized_data, label_printer)
+                                print(f"  ✓ 打印任务已加入队列: {task_id}")
                                 if logger:
-                                    if success:
-                                        logger.info("ZPL标签打印成功")
-                                    else:
-                                        logger.error("ZPL标签打印失败（返回False）")
-                            except Exception as print_error:
-                                error_msg = f"ZPL标签打印异常: {print_error}"
+                                    logger.info(f"打印任务已加入队列: {task_id}")
+                                
+                                # 队列处理是异步的，这里返回True表示任务已成功加入队列
+                                success = True
+                                
+                            except ImportError:
+                                # 如果打印队列不可用，回退到直接打印
+                                print("  ⚠ 警告: 打印队列模块不可用，使用直接打印模式")
+                                if logger:
+                                    logger.warning("打印队列模块不可用，使用直接打印模式")
+                                
+                                try:
+                                    success = label_printer.print_label(zpl_code)
+                                    if logger:
+                                        if success:
+                                            logger.info("ZPL标签打印成功")
+                                        else:
+                                            logger.error("ZPL标签打印失败（返回False）")
+                                except Exception as print_error:
+                                    error_msg = f"ZPL标签打印异常: {print_error}"
+                                    print(f"[ERROR] {error_msg}")
+                                    if logger:
+                                        logger.error(error_msg, exc_info=True)
+                                    success = False
+                            except Exception as queue_error:
+                                error_msg = f"加入打印队列失败: {queue_error}"
                                 print(f"[ERROR] {error_msg}")
                                 if logger:
                                     logger.error(error_msg, exc_info=True)
