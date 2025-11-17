@@ -63,13 +63,21 @@ def convert_zpl_chinese_to_image(zpl_code):
         x, y = pos_match.groups()
         
         # 转换为图像
-        hex_data, width, height, bpr, total = text_to_image_zpl(text, font_size=30)
-        
-        if hex_data:
-            conversion_count += 1
-            # 生成图像命令（保持^XA和其他命令的位置）
-            return f"^FO{x},{y}^GFA,{total},{total},{bpr},{hex_data}^FS"
-        else:
+        try:
+            hex_data, width, height, bpr, total = text_to_image_zpl(text, font_size=30)
+            
+            if hex_data and total > 0:
+                conversion_count += 1
+                # 生成图像命令（保持^XA和其他命令的位置）
+                return f"^FO{x},{y}^GFA,{total},{total},{bpr},{hex_data}^FS"
+            else:
+                # 转换失败，保持原样
+                print(f"  [WARNING] 中文文本转换失败，保持原样: {text[:20]}")
+                return match.group(0)
+        except Exception as convert_error:
+            print(f"  [ERROR] 转换中文文本时出错: {convert_error}")
+            import traceback
+            traceback.print_exc()
             # 转换失败，保持原样
             return match.group(0)
     

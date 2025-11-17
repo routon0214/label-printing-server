@@ -930,6 +930,19 @@ class LabelPrintMQTT:
                             print("  ZPL来源: 直接提供")
                             if logger:
                                 logger.debug(f"使用直接提供的ZPL代码，长度: {len(zpl_code) if zpl_code else 0}")
+                            
+                            # 自动检测并转换ZPL中的中文
+                            try:
+                                from src.utils.zpl_chinese_converter import detect_and_convert_zpl
+                                zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+                                if was_converted:
+                                    print("  [OK] ZPL中文已转换为图像")
+                                    if logger:
+                                        logger.info("ZPL中文已自动转换为图像")
+                            except Exception as convert_error:
+                                print(f"  [WARNING] ZPL中文转换失败，使用原始代码: {convert_error}")
+                                if logger:
+                                    logger.warning(f"ZPL中文转换失败: {convert_error}")
                         else:
                             # 根据结构化数据自动生成ZPL代码
                             zpl_code = self.zpl_generator.generate_label_zpl(content if isinstance(content, dict) else normalized_data)

@@ -1,20 +1,6 @@
 {
   "examples": [
     {
-      "id": "simple_chinese",
-      "title": "简单中文标签",
-      "desc": "最简单的中文标签示例，适合快速测试",
-      "category": "标签打印",
-      "file": "label_chinese_simple.json"
-    },
-    {
-      "id": "mixed",
-      "title": "中英文混合标签",
-      "desc": "包含中英文混合内容和条形码、二维码的标签",
-      "category": "标签打印",
-      "file": "label_chinese_mixed.json"
-    },
-    {
       "id": "zpl_chinese",
       "title": "ZPL代码含中文",
       "desc": "直接使用ZPL代码打印，包含中文内容（自动转换为图像）",

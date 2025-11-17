@@ -339,9 +339,15 @@ class PrintQueue:
                 # 直接ZPL代码
                 zpl_code = content
                 print(f"  [打印队列] 使用直接提供的ZPL代码，长度: {len(zpl_code) if zpl_code else 0} 字符")
-                zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
-                if was_converted:
-                    print("  [OK] ZPL中文已转换为图像")
+                try:
+                    zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+                    if was_converted:
+                        print("  [OK] ZPL中文已转换为图像")
+                except Exception as convert_error:
+                    print(f"  [WARNING] ZPL中文转换失败，使用原始代码: {convert_error}")
+                    import traceback
+                    traceback.print_exc()
+                    # 转换失败不影响打印，继续使用原始代码
             
             elif data_format == 'structured':
                 # 结构化数据，生成ZPL
