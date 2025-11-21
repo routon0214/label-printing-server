@@ -39,7 +39,7 @@
       "port": 9100,
       "device": null,
       "default": true,
-      "_comment": "斑马标签打印机 - 处理ZPL标签"
+      "_comment": "斑马标签打印机 - 处理ZPL标签（ZPL换行符处理已根据系统架构自动检测）"
     },
     {
       "name": "HP LaserJet",

@@ -8,18 +8,14 @@
 import os
 import socket
 import platform
+import re
 from src.utils.fuzzy_match import find_best_printer, fuzzy_match_printer
 
 
 class ZebraPrinter:
     """斑马打印机类（跨平台）"""
     
-    # 类级别的打印锁，防止重复打印
-    _print_lock = None
-    _last_print_time = {}
-    _print_cooldown = 0.5  # 0.5秒冷却时间，防止重复打印
-    
-    def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None):
+    def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None, remove_newlines=None):
         """
         初始化打印机
         
@@ -28,12 +24,16 @@ class ZebraPrinter:
             printer_ip: 打印机IP地址（网络打印）
             printer_port: 打印机端口（网络打印，默认9100）
             device_path: 设备路径（Linux直接访问，如/dev/usb/lp0）
+            remove_newlines: 是否移除ZPL代码中的换行符（已废弃，现在自动检测）
         """
         self.system = platform.system()
         self.printer_ip = printer_ip
         self.printer_port = printer_port
         self.device_path = device_path
         self.printer_name = None
+        
+        # 自动检测架构并设置换行符处理方式
+        self.remove_newlines = self._auto_detect_newlines_handling()
         
         # 如果提供了打印机名称，尝试模糊匹配
         if printer_name:
@@ -42,6 +42,36 @@ class ZebraPrinter:
         # 如果没有配置或模糊匹配失败，自动检测
         if not self.printer_name and not self.printer_ip and not self.device_path:
             self._auto_detect()
+    
+    def _auto_detect_newlines_handling(self):
+        """
+        根据系统架构自动检测换行符处理方式
+        
+        Returns:
+            bool: True=移除换行符, False=保留换行符
+        """
+        system = platform.system()
+        machine = platform.machine().lower()
+        
+        # Windows: 移除换行符（大多数Windows打印机需要）
+        if system == 'Windows':
+            print(f"[ZPL] 检测到 Windows 系统，将移除ZPL代码中的换行符")
+            return True
+        
+        # Linux: 根据架构判断
+        if system == 'Linux':
+            # ARM架构（如树莓派、ARM服务器）: 保留换行符
+            if 'arm' in machine or 'aarch64' in machine:
+                print(f"[ZPL] 检测到 Linux ARM 架构 ({machine})，将保留ZPL代码中的换行符")
+                return False
+            # x86/x64架构: 移除换行符
+            else:
+                print(f"[ZPL] 检测到 Linux x86/x64 架构 ({machine})，将移除ZPL代码中的换行符")
+                return True
+        
+        # 其他系统: 默认移除换行符
+        print(f"[ZPL] 检测到 {system} 系统 ({machine})，默认移除ZPL代码中的换行符")
+        return True
     
     def _fuzzy_find_printer(self, search_name):
         """
@@ -219,6 +249,36 @@ class ZebraPrinter:
         
         print("警告：未找到打印机，请在配置文件中指定")
     
+    def _normalize_zpl(self, zpl_code):
+        """
+        规范化ZPL代码：根据架构自动处理换行符
+        
+        Args:
+            zpl_code: 原始ZPL代码
+            
+        Returns:
+            str: 规范化后的ZPL代码
+        """
+        # 移除首尾空白字符
+        zpl_code = zpl_code.strip()
+        
+        # 统一换行符格式
+        zpl_code = zpl_code.replace('\r\n', '\n').replace('\r', '\n')
+        
+        # 根据架构自动处理换行符
+        if self.remove_newlines:
+            # 移除所有换行符（Windows/Linux x86）
+            zpl_code = zpl_code.replace('\n', '')
+        else:
+            # 保留换行符，但清理多余的空白行（Linux ARM）
+            zpl_code = re.sub(r'\n{3,}', '\n\n', zpl_code)
+        
+        # 确保ZPL代码以 ^XZ 结束
+        if not zpl_code.endswith('^XZ'):
+            zpl_code = zpl_code.rstrip() + '^XZ'
+        
+        return zpl_code
+    
     def print_label(self, zpl_code):
         """
         打印标签（跨平台）
@@ -229,33 +289,8 @@ class ZebraPrinter:
         Returns:
             bool: 是否成功
         """
-        # 防重复打印：检查冷却时间
-        import time
-        import threading
-        
-        # 使用设备路径或打印机名称作为唯一标识
-        printer_id = self.device_path or self.printer_name or 'default'
-        current_time = time.time()
-        
-        if printer_id in self._last_print_time:
-            time_since_last = current_time - self._last_print_time[printer_id]
-            if time_since_last < self._print_cooldown:
-                print(f"  ⚠ 警告: 距离上次打印仅 {time_since_last:.2f} 秒，跳过本次打印以避免重复")
-                return True  # 返回True表示已处理（避免重复）
-        
-        # 更新最后打印时间
-        self._last_print_time[printer_id] = current_time
-        
-        # 检查ZPL代码中是否包含多个打印命令（多个^XZ）
-        xz_count = zpl_code.count('^XZ')
-        if xz_count > 1:
-            print(f"  ⚠ 警告: ZPL代码包含 {xz_count} 个打印命令（^XZ），可能导致重复打印")
-            print(f"  [调试] 只使用第一个打印命令，移除后续的^XZ...")
-            # 只保留第一个^XZ之前的内容，然后添加一个^XZ
-            first_xz_pos = zpl_code.find('^XZ')
-            if first_xz_pos >= 0:
-                zpl_code = zpl_code[:first_xz_pos + 3]  # 保留第一个^XZ
-                print(f"  [调试] 已清理ZPL代码，现在只包含1个打印命令")
+        # 规范化ZPL代码
+        zpl_code = self._normalize_zpl(zpl_code)
         
         # 优先使用网络打印（所有平台通用）
         if self.printer_ip:
@@ -267,20 +302,14 @@ class ZebraPrinter:
         
         # Linux打印
         elif self.system == 'Linux':
-            # 优先直接写入设备（如果配置了设备路径，更可靠）
-            if self.device_path:
-                print(f"  [调试] 使用设备路径打印: {self.device_path}")
-                result = self._print_device(zpl_code)
-                if result:
-                    return True
-                # 如果设备打印失败，尝试CUPS作为备选
-                print(f"  [调试] 设备打印失败，尝试CUPS...")
-            
-            # 其次CUPS
+            # 优先CUPS
             if self.printer_name:
                 return self._print_cups(zpl_code)
+            # 其次USB设备
+            elif self.device_path:
+                return self._print_device(zpl_code)
             else:
-                print("错误：未配置打印机（需要设置 printer_name 或 device_path）")
+                print("错误：未配置打印机")
                 return False
         
         else:
@@ -314,7 +343,9 @@ class ZebraPrinter:
             job_info = ("Label Print", None, "RAW")
             win32print.StartDocPrinter(printer_handle, 1, job_info)
             win32print.StartPagePrinter(printer_handle)
-            win32print.WritePrinter(printer_handle, zpl_code.encode('utf-8'))
+            # 使用 bytes 类型发送，确保编码正确
+            zpl_bytes = zpl_code.encode('utf-8')
+            win32print.WritePrinter(printer_handle, zpl_bytes)
             win32print.EndPagePrinter(printer_handle)
             win32print.EndDocPrinter(printer_handle)
             win32print.ClosePrinter(printer_handle)
@@ -334,394 +365,43 @@ class ZebraPrinter:
         try:
             import cups
             import tempfile
+            
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.zpl', delete=False) as f:
+                f.write(zpl_code)
+                temp_file = f.name
+            
+            # 通过CUPS打印
+            conn = cups.Connection()
+            conn.printFile(self.printer_name, temp_file, "Label Print", {})
+            
+            # 删除临时文件
+            os.remove(temp_file)
+            
+            print(f"[OK] CUPS打印成功: {self.printer_name}")
+            return True
+            
         except ImportError:
             print("提示：Linux建议安装 pycups: pip install pycups")
             return False
-        
-        try:
-            # 创建临时文件（使用二进制模式，因为ZPL可能包含特殊字符）
-            temp_file_path = None
-            print(f"  [调试] 准备发送ZPL代码，长度: {len(zpl_code)} 字符")
-            print(f"  [调试] ZPL代码预览: {zpl_code[:100]}...")
-            
-            with tempfile.NamedTemporaryFile(mode='wb', suffix='.zpl', delete=False) as f:
-                # ZPL代码需要编码为字节
-                zpl_bytes = zpl_code.encode('utf-8')
-                f.write(zpl_bytes)
-                temp_file_path = f.name
-                print(f"  [调试] 临时文件已创建: {temp_file_path} ({len(zpl_bytes)} 字节)")
-            
-            try:
-                # 通过CUPS打印（使用空字典作为options，让CUPS自动处理RAW格式）
-                conn = cups.Connection()
-                
-                # 检查打印机信息
-                printers = conn.getPrinters()
-                if self.printer_name in printers:
-                    printer_info = printers[self.printer_name]
-                    print(f"  [调试] 打印机信息: {printer_info.get('printer-info', 'N/A')}")
-                    print(f"  [调试] 打印机状态: {printer_info.get('printer-state', 'N/A')}")
-                    print(f"  [调试] 支持的格式: {printer_info.get('document-format-supported', [])}")
-                
-                # 检查ZPL代码中是否包含多个打印命令（多个^XZ）
-                xz_count = zpl_code.count('^XZ')
-                if xz_count > 1:
-                    print(f"  ⚠ 警告: ZPL代码包含 {xz_count} 个打印命令（^XZ），可能导致重复打印")
-                    print(f"  [调试] 只使用第一个打印命令，移除后续的^XZ...")
-                    # 只保留第一个^XZ之前的内容，然后添加一个^XZ
-                    first_xz_pos = zpl_code.find('^XZ')
-                    if first_xz_pos >= 0:
-                        zpl_code = zpl_code[:first_xz_pos + 3]  # 保留第一个^XZ
-                        print(f"  [调试] 已清理ZPL代码，现在只包含1个打印命令")
-                
-                # 优先尝试：如果可以从CUPS获取设备路径，直接使用设备路径（避免CUPS处理ZPL的问题）
-                device_path_to_try = self.device_path
-                if not device_path_to_try:
-                    try:
-                        printer_attrs = conn.getPrinterAttributes(self.printer_name)
-                        device_uri = printer_attrs.get('device-uri', '')
-                        print(f"  [调试] 打印机设备URI: {device_uri}")
-                        
-                        if device_uri.startswith('usb://'):
-                            # USB设备，尝试找到对应的/dev/usb/lp*设备
-                            import glob
-                            usb_devices = glob.glob('/dev/usb/lp*')
-                            print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
-                            if usb_devices:
-                                # 使用第一个USB设备
-                                device_path_to_try = usb_devices[0]
-                                print(f"  [调试] 从CUPS获取到USB设备: {device_path_to_try}")
-                                print(f"  [调试] 优先使用设备直接写入，避免CUPS处理ZPL的问题...")
-                                
-                                # 直接使用设备路径打印，完全跳过CUPS
-                                try:
-                                    # 临时设置设备路径
-                                    original_device_path = self.device_path
-                                    self.device_path = device_path_to_try
-                                    try:
-                                        result = self._print_device(zpl_code)
-                                        if result:
-                                            print(f"  ✓ 设备直接写入成功（跳过CUPS，避免重复打印）")
-                                            return True
-                                    finally:
-                                        self.device_path = original_device_path
-                                except Exception as device_error:
-                                    print(f"  [调试] 设备直接写入失败，回退到CUPS: {device_error}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    # 如果设备写入失败，继续使用CUPS
-                    except Exception as uri_error:
-                        print(f"  [调试] 无法获取设备URI: {uri_error}")
-                
-                # 方法1: 使用空字典（标准方式）
-                print(f"  [方法1] 使用CUPS API (空字典)...")
-                try:
-                    job_id = conn.printFile(
-                        self.printer_name,
-                        temp_file_path,
-                        "ZPL Label Print",
-                        {}  # 空字典，让CUPS自动处理RAW格式
-                    )
-                    
-                    print(f"  [调试] CUPS返回作业ID: {job_id}")
-                    
-                    # 检查作业ID（如果为0或None，表示失败）
-                    if not job_id or job_id == 0:
-                        print(f"  [方法1失败] 作业ID无效: {job_id}")
-                    else:
-                        print(f"[OK] CUPS打印成功: {self.printer_name} (作业ID: {job_id})")
-                        
-                        # 等待并检查打印作业状态
-                        import time
-                        
-                        # CUPS作业状态码：
-                        # 3 = IPP_JOB_STATE_PENDING (等待处理)
-                        # 4 = IPP_JOB_STATE_HELD (暂停)
-                        # 5 = IPP_JOB_STATE_PROCESSING (处理中)
-                        # 6 = IPP_JOB_STATE_STOPPED (停止)
-                        # 7 = IPP_JOB_STATE_CANCELED (取消)
-                        # 8 = IPP_JOB_STATE_ABORTED (中止)
-                        # 9 = IPP_JOB_STATE_COMPLETED (完成)
-                        
-                        job_completed = False
-                        max_wait_time = 2.0  # 最多等待2秒
-                        check_interval = 0.3  # 每0.3秒检查一次
-                        waited_time = 0
-                        pending_count = 0  # 记录pending状态的次数
-                        
-                        while waited_time < max_wait_time:
-                            time.sleep(check_interval)
-                            waited_time += check_interval
-                            
-                            try:
-                                # 获取打印作业信息
-                                job_info = conn.getJobAttributes(job_id)
-                                job_state = job_info.get('job-state', 'unknown')
-                                job_state_reasons = job_info.get('job-state-reasons', [])
-                                
-                                print(f"  [调试] 打印作业状态: {job_state} (等待 {waited_time:.1f}秒)")
-                                
-                                if job_state_reasons and job_state_reasons != ['none']:
-                                    print(f"  [调试] 状态原因: {job_state_reasons}")
-                                
-                                # 状态9表示完成
-                                if job_state == 9:
-                                    print(f"  ✓ 打印作业已完成")
-                                    job_completed = True
-                                    break
-                                # 状态5表示正在处理（可能已经开始打印，立即取消）
-                                elif job_state == 5:
-                                    print(f"  ⚠ 警告: 打印作业正在处理中，可能已经开始打印")
-                                    print(f"  [调试] 立即取消CUPS作业，避免重复打印...")
-                                    try:
-                                        conn.cancelJob(job_id)
-                                        print(f"  [调试] 已取消CUPS打印作业 {job_id}")
-                                    except Exception as cancel_error:
-                                        print(f"  [调试] 取消CUPS作业失败: {cancel_error}")
-                                    # 标记为未完成，后续会尝试直接写入设备
-                                    break
-                                # 状态3表示等待处理
-                                elif job_state == 3:
-                                    pending_count += 1
-                                    print(f"  [调试] 打印作业等待处理中... (pending {pending_count}次)")
-                                    # 如果pending超过1次（约0.3秒），立即取消并切换到直接写入
-                                    # 因为ZPL代码通常CUPS无法处理，等待时间越长越可能已经开始处理
-                                    if pending_count >= 1:
-                                        print(f"  ⚠ 警告: 打印作业一直pending，可能CUPS无法处理ZPL")
-                                        print(f"  [调试] 立即取消CUPS作业，切换到直接写入设备...")
-                                        try:
-                                            conn.cancelJob(job_id)
-                                            print(f"  [调试] 已取消CUPS打印作业 {job_id}")
-                                        except Exception as cancel_error:
-                                            print(f"  [调试] 取消CUPS作业失败: {cancel_error}")
-                                        break
-                                # 其他状态可能是错误
-                                elif job_state in [4, 6, 7, 8]:
-                                    print(f"  ⚠ 警告: 打印作业状态异常: {job_state}")
-                                    if job_state_reasons:
-                                        print(f"    原因: {job_state_reasons}")
-                                    # 如果作业被暂停或停止，尝试其他方法
-                                    break
-                                    
-                            except Exception as status_error:
-                                # 如果无法获取作业状态，可能是作业已完成或被删除
-                                print(f"  [调试] 无法获取打印作业状态 (可能已完成): {status_error}")
-                                # 假设已完成，继续执行
-                                job_completed = True
-                                break
-                        
-                        # 如果作业未完成或一直pending，尝试直接写入设备（CUPS可能无法处理ZPL）
-                        if not job_completed:
-                            print(f"  ⚠ 警告: CUPS打印作业一直处于pending状态，可能无法处理ZPL代码")
-                            print(f"  [调试] 尝试直接写入设备以确保打印...")
-                            
-                            device_path_to_try = self.device_path
-                            
-                            # 如果没有配置设备路径，尝试从CUPS获取
-                            if not device_path_to_try:
-                                try:
-                                    printer_attrs = conn.getPrinterAttributes(self.printer_name)
-                                    device_uri = printer_attrs.get('device-uri', '')
-                                    print(f"  [调试] 打印机设备URI: {device_uri}")
-                                    
-                                    if device_uri.startswith('usb://'):
-                                        # USB设备，尝试找到对应的/dev/usb/lp*设备
-                                        import glob
-                                        usb_devices = glob.glob('/dev/usb/lp*')
-                                        print(f"  [调试] 找到 {len(usb_devices)} 个USB设备: {usb_devices}")
-                                        if usb_devices:
-                                            # 使用第一个USB设备
-                                            device_path_to_try = usb_devices[0]
-                                            print(f"  [调试] 尝试使用USB设备: {device_path_to_try}")
-                                except Exception as uri_error:
-                                    print(f"  [调试] 无法获取设备URI: {uri_error}")
-                            
-                            # 如果找到了设备路径，尝试直接写入设备
-                            if device_path_to_try:
-                                try:
-                                    # 注意：CUPS作业可能已经在pending检测时被取消了
-                                    # 直接读取临时文件并写入设备
-                                    with open(temp_file_path, 'rb') as f:
-                                        zpl_bytes = f.read()
-                                    
-                                    # 解码为字符串，然后使用_print_device方法
-                                    zpl_code = zpl_bytes.decode('utf-8')
-                                    
-                                    # 临时设置设备路径并尝试打印
-                                    original_device_path = self.device_path
-                                    self.device_path = device_path_to_try
-                                    try:
-                                        result = self._print_device(zpl_code)
-                                        if result:
-                                            print(f"  ✓ 设备直接写入成功（已取消CUPS作业，避免重复打印）")
-                                            return True
-                                    finally:
-                                        self.device_path = original_device_path
-                                except Exception as device_error:
-                                    print(f"  [调试] 设备直接写入失败: {device_error}")
-                                    import traceback
-                                    traceback.print_exc()
-                            else:
-                                print(f"  ⚠ 无法找到设备路径，CUPS打印作业可能仍在队列中")
-                                print(f"  提示: 如果打印机没有反应，可以尝试:")
-                                print(f"    1. 检查CUPS打印队列: lpstat -p {self.printer_name}")
-                                print(f"    2. 检查打印作业: lpstat -o")
-                                print(f"    3. 检查打印机状态: lpstat -p {self.printer_name} -l")
-                                print(f"    4. 在配置中添加设备路径（device）以使用直接写入")
-                        
-                        # 如果作业已完成或无法直接写入设备，返回True（CUPS已接受作业）
-                        return True
-                except Exception as method1_error:
-                    print(f"  [方法1失败] CUPS API失败: {method1_error}")
-                    import traceback
-                    traceback.print_exc()
-                
-                # 方法2: 使用lp命令（备选方案）
-                print(f"  [方法2] 尝试使用lp命令...")
-                import subprocess
-                result = subprocess.run(
-                    ['lp', '-d', self.printer_name, temp_file_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if result.returncode == 0:
-                    print(f"[OK] lp打印成功: {self.printer_name}")
-                    print(f"  [调试] lp输出: {result.stdout}")
-                    import time
-                    time.sleep(0.5)
-                    return True
-                else:
-                    print(f"  [方法2失败] lp命令失败: {result.stderr}")
-                
-                # 所有方法都失败
-                print(f"[ERROR] 所有ZPL打印方法都失败")
-                return False
-            finally:
-                # 删除临时文件
-                if temp_file_path and os.path.exists(temp_file_path):
-                    os.remove(temp_file_path)
-            
         except Exception as e:
-            # 检查是否是IPPError
-            import cups
-            if hasattr(cups, 'IPPError') and isinstance(e, cups.IPPError):
-                print(f"[ERROR] CUPS打印失败 (IPP错误): {e}")
-            else:
-                print(f"[ERROR] CUPS打印失败: {e}")
-                import traceback
-                traceback.print_exc()
+            print(f"[ERROR] CUPS打印失败: {e}")
             return False
     
     def _print_device(self, zpl_code):
         """直接写入设备（Linux）"""
         try:
-            if not zpl_code or len(zpl_code) == 0:
-                print(f"[ERROR] ZPL设备打印失败: ZPL代码为空")
-                return False
+            with open(self.device_path, 'wb') as device:
+                device.write(zpl_code.encode('utf-8'))
             
-            # 检查ZPL代码中是否包含多个打印命令（多个^XZ）
-            xz_count = zpl_code.count('^XZ')
-            if xz_count > 1:
-                print(f"  ⚠ 警告: ZPL代码包含 {xz_count} 个打印命令（^XZ），可能导致重复打印")
-                print(f"  [调试] 只使用第一个打印命令，移除后续的^XZ...")
-                # 只保留第一个^XZ之前的内容，然后添加一个^XZ
-                first_xz_pos = zpl_code.find('^XZ')
-                if first_xz_pos >= 0:
-                    zpl_code = zpl_code[:first_xz_pos + 3]  # 保留第一个^XZ
-                    print(f"  [调试] 已清理ZPL代码，现在只包含1个打印命令")
-            
-            print(f"  [调试] 准备发送ZPL代码到设备: {self.device_path}")
-            print(f"  [调试] ZPL代码长度: {len(zpl_code)} 字符")
-            
-            # 验证设备是否存在且可写
-            import os
-            import stat
-            if not os.path.exists(self.device_path):
-                print(f"[ERROR] 设备不存在: {self.device_path}")
-                return False
-            
-            # 检查设备类型
-            try:
-                device_stat = os.stat(self.device_path)
-                if not stat.S_ISCHR(device_stat.st_mode):
-                    print(f"[ERROR] 不是字符设备: {self.device_path}")
-                    return False
-            except Exception as stat_error:
-                print(f"  [调试] 无法获取设备信息: {stat_error}")
-            
-            # 编码ZPL代码
-            zpl_bytes = zpl_code.encode('utf-8')
-            print(f"  [调试] ZPL字节长度: {len(zpl_bytes)} 字节")
-            
-            # 使用O_SYNC标志确保数据立即写入设备
-            bytes_written = 0
-            write_success = False
-            
-            try:
-                # 以同步模式打开设备（O_SYNC确保数据立即写入）
-                fd = os.open(self.device_path, os.O_WRONLY | os.O_SYNC)
-                try:
-                    # 写入数据
-                    bytes_written = os.write(fd, zpl_bytes)
-                    print(f"  [调试] 已写入 {bytes_written} 字节到文件描述符")
-                    write_success = True
-                    
-                    # 使用fsync确保数据真正发送到设备（失败不影响，数据已写入）
-                    try:
-                        os.fsync(fd)
-                        print(f"  [调试] 已调用fsync同步数据")
-                    except Exception as sync_error:
-                        print(f"  [调试] fsync失败（数据已写入）: {sync_error}")
-                    
-                    print(f"[OK] ZPL设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
-                    
-                    # 等待一小段时间，确保数据发送完成
-                    import time
-                    time.sleep(0.3)
-                    
-                    return True
-                finally:
-                    os.close(fd)
-            except OSError as os_error:
-                # 如果O_SYNC失败且数据未写入，尝试普通方式
-                if not write_success:
-                    print(f"  [调试] O_SYNC模式失败，尝试普通模式: {os_error}")
-                    try:
-                        with open(self.device_path, 'wb') as device:
-                            bytes_written = device.write(zpl_bytes)
-                            print(f"  [调试] 已写入 {bytes_written} 字节")
-                            device.flush()
-                            print(f"  [调试] 已调用flush")
-                            # 尝试同步（失败不影响，数据已写入）
-                            try:
-                                os.fsync(device.fileno())
-                                print(f"  [调试] 已调用fsync")
-                            except Exception as sync_error:
-                                print(f"  [调试] fsync失败（数据已写入）: {sync_error}")
-                        print(f"[OK] ZPL设备打印成功: {self.device_path} (已写入 {bytes_written} 字节)")
-                        import time
-                        time.sleep(0.3)
-                        return True
-                    except Exception as fallback_error:
-                        print(f"  [调试] 普通模式也失败: {fallback_error}")
-                        raise
-                else:
-                    # 数据已写入，即使fsync失败也不应该再次写入
-                    print(f"  [调试] 数据已写入，跳过普通模式（避免重复写入）")
-                    return True
+            print(f"[OK] 设备打印成功: {self.device_path}")
+            return True
             
         except PermissionError:
             print(f"[ERROR] 权限不足: {self.device_path}")
-            print(f"提示：sudo chmod 666 {self.device_path} 或添加用户到lp组: sudo usermod -a -G lp $USER")
-            return False
-        except FileNotFoundError:
-            print(f"[ERROR] 设备不存在: {self.device_path}")
-            print(f"提示: 检查设备路径是否正确，可以使用 ls -l /dev/usb/lp* 查看可用设备")
+            print(f"提示：请运行 sudo chmod 666 {self.device_path}")
             return False
         except Exception as e:
-            print(f"[ERROR] ZPL设备打印失败: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[ERROR] 设备打印失败: {e}")
             return False
 
