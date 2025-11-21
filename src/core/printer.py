@@ -8,13 +8,14 @@
 import os
 import socket
 import platform
+import re
 from src.utils.fuzzy_match import find_best_printer, fuzzy_match_printer
 
 
 class ZebraPrinter:
     """斑马打印机类（跨平台）"""
     
-    def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None):
+    def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None, remove_newlines=None):
         """
         初始化打印机
         
@@ -23,12 +24,16 @@ class ZebraPrinter:
             printer_ip: 打印机IP地址（网络打印）
             printer_port: 打印机端口（网络打印，默认9100）
             device_path: 设备路径（Linux直接访问，如/dev/usb/lp0）
+            remove_newlines: 是否移除ZPL代码中的换行符（已废弃，现在自动检测）
         """
         self.system = platform.system()
         self.printer_ip = printer_ip
         self.printer_port = printer_port
         self.device_path = device_path
         self.printer_name = None
+        
+        # 自动检测架构并设置换行符处理方式
+        self.remove_newlines = self._auto_detect_newlines_handling()
         
         # 如果提供了打印机名称，尝试模糊匹配
         if printer_name:
@@ -37,6 +42,36 @@ class ZebraPrinter:
         # 如果没有配置或模糊匹配失败，自动检测
         if not self.printer_name and not self.printer_ip and not self.device_path:
             self._auto_detect()
+    
+    def _auto_detect_newlines_handling(self):
+        """
+        根据系统架构自动检测换行符处理方式
+        
+        Returns:
+            bool: True=移除换行符, False=保留换行符
+        """
+        system = platform.system()
+        machine = platform.machine().lower()
+        
+        # Windows: 移除换行符（大多数Windows打印机需要）
+        if system == 'Windows':
+            print(f"[ZPL] 检测到 Windows 系统，将移除ZPL代码中的换行符")
+            return True
+        
+        # Linux: 根据架构判断
+        if system == 'Linux':
+            # ARM架构（如树莓派、ARM服务器）: 保留换行符
+            if 'arm' in machine or 'aarch64' in machine:
+                print(f"[ZPL] 检测到 Linux ARM 架构 ({machine})，将保留ZPL代码中的换行符")
+                return False
+            # x86/x64架构: 移除换行符
+            else:
+                print(f"[ZPL] 检测到 Linux x86/x64 架构 ({machine})，将移除ZPL代码中的换行符")
+                return True
+        
+        # 其他系统: 默认移除换行符
+        print(f"[ZPL] 检测到 {system} 系统 ({machine})，默认移除ZPL代码中的换行符")
+        return True
     
     def _fuzzy_find_printer(self, search_name):
         """
@@ -214,6 +249,36 @@ class ZebraPrinter:
         
         print("警告：未找到打印机，请在配置文件中指定")
     
+    def _normalize_zpl(self, zpl_code):
+        """
+        规范化ZPL代码：根据架构自动处理换行符
+        
+        Args:
+            zpl_code: 原始ZPL代码
+            
+        Returns:
+            str: 规范化后的ZPL代码
+        """
+        # 移除首尾空白字符
+        zpl_code = zpl_code.strip()
+        
+        # 统一换行符格式
+        zpl_code = zpl_code.replace('\r\n', '\n').replace('\r', '\n')
+        
+        # 根据架构自动处理换行符
+        if self.remove_newlines:
+            # 移除所有换行符（Windows/Linux x86）
+            zpl_code = zpl_code.replace('\n', '')
+        else:
+            # 保留换行符，但清理多余的空白行（Linux ARM）
+            zpl_code = re.sub(r'\n{3,}', '\n\n', zpl_code)
+        
+        # 确保ZPL代码以 ^XZ 结束
+        if not zpl_code.endswith('^XZ'):
+            zpl_code = zpl_code.rstrip() + '^XZ'
+        
+        return zpl_code
+    
     def print_label(self, zpl_code):
         """
         打印标签（跨平台）
@@ -224,6 +289,9 @@ class ZebraPrinter:
         Returns:
             bool: 是否成功
         """
+        # 规范化ZPL代码
+        zpl_code = self._normalize_zpl(zpl_code)
+        
         # 优先使用网络打印（所有平台通用）
         if self.printer_ip:
             return self._print_network(zpl_code)
@@ -275,7 +343,9 @@ class ZebraPrinter:
             job_info = ("Label Print", None, "RAW")
             win32print.StartDocPrinter(printer_handle, 1, job_info)
             win32print.StartPagePrinter(printer_handle)
-            win32print.WritePrinter(printer_handle, zpl_code.encode('utf-8'))
+            # 使用 bytes 类型发送，确保编码正确
+            zpl_bytes = zpl_code.encode('utf-8')
+            win32print.WritePrinter(printer_handle, zpl_bytes)
             win32print.EndPagePrinter(printer_handle)
             win32print.EndDocPrinter(printer_handle)
             win32print.ClosePrinter(printer_handle)
