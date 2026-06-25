@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打印模板设置</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { font-family: 'Microsoft YaHei', sans-serif; background: #f5f5f5; margin: 0; padding: 0; }
+  .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 24px; }
+  .header h1 { margin: 0; font-size: 20px; }
+  .header a { color: rgba(255,255,255,0.8); font-size: 14px; text-decoration: none; }
+  .header a:hover { color: white; }
+  .container { max-width: 680px; margin: 24px auto; padding: 0 16px; }
+  .card { background: white; border-radius: 8px; padding: 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .card h2 { margin: 0 0 16px 0; font-size: 16px; color: #333; border-bottom: 2px solid #667eea; padding-bottom: 8px; }
+  .form-row { display: flex; align-items: center; margin-bottom: 12px; }
+  .form-row label { width: 140px; font-size: 14px; color: #555; flex-shrink: 0; }
+  .form-row input, .form-row select { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+  .form-row input:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 2px rgba(102,126,234,0.2); }
+  .form-row .unit { width: 50px; font-size: 13px; color: #999; margin-left: 8px; }
+  .form-row .hint { font-size: 12px; color: #999; margin-left: 8px; }
+  .btn-row { text-align: right; margin-top: 16px; }
+  .btn { padding: 10px 24px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+  .btn-primary { background: #667eea; color: white; }
+  .btn-primary:hover { background: #5a6fd6; }
+  .btn-outline { background: white; color: #667eea; border: 1px solid #667eea; margin-right: 8px; }
+  .btn-outline:hover { background: #f0f2ff; }
+  .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 4px; font-size: 14px; z-index: 999; transition: opacity 0.3s; }
+  .toast-success { background: #4caf50; color: white; }
+  .toast-error { background: #f44336; color: white; }
+  .checkbox-row { display: flex; align-items: center; }
+  .checkbox-row input[type=checkbox] { width: 18px; height: 18px; margin-right: 8px; }
+  .checkbox-row label { font-size: 14px; color: #555; }
+  .card .preview-note { font-size: 12px; color: #999; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🖨️ 打印模板设置</h1>
+  <a href="/">← 返回主页</a>
+</div>
+
+<div class="container">
+  <div class="card">
+    <h2>📐 标签尺寸</h2>
+    <div class="form-row">
+      <label>标签宽度(dots)</label>
+      <input type="number" id="label_width" min="100" max="2000">
+      <span class="hint">ZPL ^PW 参数，通常800</span>
+    </div>
+    <div class="form-row">
+      <label>标签高度(dots)</label>
+      <input type="number" id="label_height" min="100" max="3000">
+      <span class="hint">ZPL ^LL 参数，通常600</span>
+    </div>
+    <div class="form-row">
+      <label>左边距(dots)</label>
+      <input type="number" id="margin_left" min="10" max="300">
+      <span class="hint">内容距左边缘距离</span>
+    </div>
+    <div class="preview-note">1mm ≈ 8 dots (203dpi) / 12 dots (300dpi)</div>
+  </div>
+
+  <div class="card">
+    <h2>🔤 字体与排版</h2>
+    <div class="form-row">
+      <label>标题字号</label>
+      <input type="number" id="font_size_title" min="20" max="80">
+      <span class="hint">建议30-50</span>
+    </div>
+    <div class="form-row">
+      <label>字段字号</label>
+      <input type="number" id="font_size_field" min="16" max="60">
+      <span class="hint">建议22-30</span>
+    </div>
+    <div class="form-row">
+      <label>字段间距(dots)</label>
+      <input type="number" id="field_spacing" min="2" max="40">
+      <span class="hint">行与行间距</span>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="show_separator" checked>
+      <label>显示标题下方分隔线</label>
+    </div>
+    <div class="form-row" id="sep-row">
+      <label>分隔线粗细</label>
+      <input type="number" id="separator_height" min="1" max="10">
+      <span class="hint">1-5 dots</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📊 条码设置</h2>
+    <div class="form-row">
+      <label>条码高度(dots)</label>
+      <input type="number" id="barcode_height" min="30" max="200">
+      <span class="hint">条码纵向高度</span>
+    </div>
+    <div class="form-row">
+      <label>窄条宽度</label>
+      <input type="number" id="barcode_narrow" min="1" max="5">
+      <span class="hint">^BY 第一个参数</span>
+    </div>
+    <div class="form-row">
+      <label>宽条宽度</label>
+      <input type="number" id="barcode_wide" min="2" max="10">
+      <span class="hint">^BY 第二个参数</span>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-outline" onclick="loadConfig()">🔄 重新加载</button>
+    <button class="btn btn-primary" onclick="saveConfig()">💾 保存设置</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none;"></div>
+
+<script>
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type;
+  t.style.display = 'block';
+  t.style.opacity = '1';
+  setTimeout(function() { t.style.opacity = '0'; }, 2500);
+  setTimeout(function() { t.style.display = 'none'; }, 2800);
+}
+
+var fieldMap = {
+  'label_width': 'label_width',
+  'label_height': 'label_height',
+  'margin_left': 'margin_left',
+  'font_size_title': 'font_size_title',
+  'font_size_field': 'font_size_field',
+  'field_spacing': 'field_spacing',
+  'separator_height': 'separator_height',
+  'barcode_height': 'barcode_height',
+  'barcode_narrow': 'barcode_narrow',
+  'barcode_wide': 'barcode_wide',
+  'show_separator': 'show_separator'
+};
+
+function loadConfig() {
+  fetch('/api/template/config')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success && data.template) {
+        var t = data.template;
+        for (var id in fieldMap) {
+          var el = document.getElementById(id);
+          if (el && t[id] !== undefined) {
+            if (el.type === 'checkbox') el.checked = t[id];
+            else el.value = t[id];
+          }
+        }
+        showToast('配置已加载', 'success');
+      }
+    })
+    .catch(function() { showToast('加载失败', 'error'); });
+}
+
+function saveConfig() {
+  var cfg = {};
+  for (var id in fieldMap) {
+    var el = document.getElementById(id);
+    if (!el) continue;
+    cfg[id] = el.type === 'checkbox' ? el.checked :
+              el.type === 'number' ? parseInt(el.value) || 0 : el.value;
+  }
+
+  fetch('/api/template/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(cfg)
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) showToast('✅ 保存成功！重启服务后生效', 'success');
+      else showToast('保存失败: ' + (data.error || '未知错误'), 'error');
+    })
+    .catch(function() { showToast('保存失败', 'error'); });
+}
+
+loadConfig();
+</script>
+</body>
+</html>

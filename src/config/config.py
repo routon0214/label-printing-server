@@ -84,6 +84,20 @@ class ConfigManager:
         # 否则使用分离格式（向后兼容）
         return mqtt_config
     
+    def save(self, config_data=None):
+        """
+        保存配置到文件
+        
+        Args:
+            config_data: 要保存的配置数据，为None则保存当前内存中的配置
+        """
+        if config_data is not None:
+            self.config = config_data
+        if self.config is None:
+            raise ValueError("没有配置数据可保存")
+        with open(self.config_file, 'w', encoding='utf-8') as f:
+            json.dump(self.config, f, ensure_ascii=False, indent=2)
+
     def get_printer_config(self):
         """获取打印机配置（单打印机，兼容旧版）"""
         if self.config is None:

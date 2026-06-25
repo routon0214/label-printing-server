@@ -74,6 +74,7 @@ from src.utils.zpl_chinese_converter import detect_and_convert_zpl
 from src.utils.log_manager import LogManager
 from src.utils.print_queue import get_print_queue
 from src.core.template_manager import TemplateManager
+from src.core.template_renderer import TemplateRenderer
 
 # 创建FastAPI应用
 app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
@@ -1056,10 +1057,11 @@ async def print_wps(request: Request):
         fields = data.get('fields', [])
         barcode = data.get('barcode', '')
         qrcode = data.get('qrcode', '')
+        template_id = data.get('template_id', '')
         
         # 如果没有指定 fields，可以接受平铺的 key-value
         if not fields:
-            exclude_keys = {'title', 'printer', 'barcode', 'qrcode', 'fields'}
+            exclude_keys = {'title', 'printer', 'barcode', 'qrcode', 'fields', 'template_id', 'api_key'}
             for key, value in data.items():
                 if key not in exclude_keys:
                     fields.append({"label": key, "value": str(value)})
@@ -1070,18 +1072,41 @@ async def print_wps(request: Request):
                 content={"success": False, "error": "缺少打印字段（fields为空且无其他字段）"}
             )
         
-        # 构建 label_data 格式（兼容 generate_label_zpl）
-        label_data = {
-            "title": title,
-            "fields": fields
-        }
-        if barcode:
-            label_data["barcode"] = str(barcode)
-        if qrcode:
-            label_data["qrcode"] = str(qrcode)
-        
-        # 生成 ZPL 代码
-        zpl_code = zpl_generator.generate_label_zpl(label_data)
+        # 生成 ZPL 代码（支持设计器模板）
+        if template_id:
+            # 使用设计器模板渲染
+            tmpl = template_manager.get_template(template_id)
+            if not tmpl:
+                return JSONResponse(
+                    status_code=404,
+                    content={"success": False, "error": f"模板 '{template_id}' 不存在"}
+                )
+            # 构建变量字典：将 WPS fields 的 label->value 映射为模板变量
+            variables = {}
+            for f in fields:
+                key = f.get('label', '')
+                val = str(f.get('value', ''))
+                if key:
+                    variables[key] = val
+            if barcode:
+                variables['barcode'] = str(barcode)
+            if qrcode:
+                variables['qrcode'] = str(qrcode)
+            # 使用模板渲染器生成 ZPL
+            renderer = TemplateRenderer(tmpl)
+            zpl_code = renderer.render(variables)
+            print(f"[WPS打印] 使用模板 '{tmpl.get('name', template_id)}' 渲染, 变量: {list(variables.keys())}")
+        else:
+            # 使用默认 zpl_generator 布局
+            label_data = {
+                "title": title,
+                "fields": fields
+            }
+            if barcode:
+                label_data["barcode"] = str(barcode)
+            if qrcode:
+                label_data["qrcode"] = str(qrcode)
+            zpl_code = zpl_generator.generate_label_zpl(label_data)
         
         # 自动检测并转换中文
         zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
@@ -2115,6 +2140,20 @@ async def designer_page(request: Request, username: str = Depends(verify_credent
     )
 
 
+@app.get("/template-settings", response_class=HTMLResponse)
+async def template_settings_page(request: Request, username: str = Depends(verify_credentials)):
+    """打印模板设置页面"""
+    settings_path = get_internal_resource_path('templates/template_settings.html')
+    if os.path.exists(settings_path):
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    return HTMLResponse(
+        content="<h1>错误：设置页面未找到</h1>",
+        status_code=500
+    )
+
+
 @app.get("/api/print/templates")
 async def list_templates(username: str = Depends(verify_credentials)):
     """列出所有模板"""
@@ -2291,6 +2330,67 @@ async def print_from_template(request: Request, username: str = Depends(verify_c
 
 
 # ============================================================
+# ZPL打印模板配置 API
+# ============================================================
+
+@app.get("/api/template/config")
+async def get_template_config(username: str = Depends(verify_credentials)):
+    """获取ZPL打印模板配置"""
+    global config_manager
+    try:
+        if config_manager is None:
+            config_manager = ConfigManager('config/printer_config.json')
+        config = config_manager.load()
+        template_config = config.get('template', {})
+        return JSONResponse({
+            "success": True,
+            "template": template_config
+        })
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+@app.post("/api/template/config")
+async def update_template_config(request: Request, username: str = Depends(verify_credentials)):
+    """更新ZPL打印模板配置"""
+    global config_manager
+    try:
+        data = await request.json()
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的配置数据"}
+            )
+
+        if config_manager is None:
+            config_manager = ConfigManager('config/printer_config.json')
+
+        # 读取完整配置，仅更新 template 部分
+        full_config = config_manager.load()
+        full_config['template'] = data
+        
+        # 保存
+        config_manager.save(full_config)
+        print(f"[模板配置] 已更新保存")
+        
+        return JSONResponse({
+            "success": True,
+            "message": "模板配置已保存",
+            "template": data
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+# ============================================================
 # 自定义元素 API（设计器复用组件）
 # ============================================================
 
@@ -2416,4 +2516,7 @@ if __name__ == '__main__':
     try:
         uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
     except KeyboardInterrupt:
+        print("\n\nWeb服务已停止")
+        print("\n\nWeb服务已停止")
+        print("\n\nWeb服务已停止")
         print("\n\nWeb服务已停止")

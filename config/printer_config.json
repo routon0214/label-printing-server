@@ -50,5 +50,18 @@
       "port": 9100,
       "device": null
     }
-  ]
+  ],
+  "template": {
+    "_comment": "ZPL标签打印模板参数配置",
+    "label_width": 800,
+    "label_height": 600,
+    "margin_left": 50,
+    "font_size_title": 40,
+    "font_size_field": 25,
+    "field_spacing": 10,
+    "separator_height": 3,
+    "barcode_height": 70,
+    "barcode_narrow": 2,
+    "barcode_wide": 3
+  }
 }

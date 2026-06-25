@@ -46,6 +46,20 @@ logs/*.txt
 data/failed_labels/*.zpl
 failed_labels/*.zpl
 
+# Runtime data
+data/print_queue/
+data/uploads/
+data/custom-elements/
+data/logs/
+data/debug/
+data/test_samples/
+.pending_jobs/
+pending_jobs/
+
+# Temp files
+*.pyc
+_patch_*.py
+
 # OS
 .DS_Store
 Thumbs.db

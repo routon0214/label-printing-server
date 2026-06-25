@@ -1,6 +1,0 @@
-{
-  "print_type": "label",
-  "format": "zpl",
-  "content": "^XA\n^MMT\n^PW320\n^LL240\n^FO10,5^A0N,20,20^FDProduct^FS\n^FO10,30^A0N,18,18^FDName: Test^FS\n^FO10,55^A0N,18,18^FD编号: NO-001^FS\n^FO10,80^BY1,3,30^BCN,30,Y,N,N^FD123456^FS\n^XZ"
-}
-
