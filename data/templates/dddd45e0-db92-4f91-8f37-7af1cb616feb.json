@@ -1,0 +1,159 @@
+{
+  "id": "dddd45e0-db92-4f91-8f37-7af1cb616feb",
+  "name": "电控发货打印",
+  "data": {
+    "pages": [
+      {
+        "id": "1159cd0e-4e20-4411-b513-1fa5d7588fbe",
+        "elements": [
+          {
+            "type": "text",
+            "x": 8,
+            "y": 8,
+            "width": 117.94871794871794,
+            "height": 24.35897435897435,
+            "variable": "",
+            "printable": true,
+            "style": {
+              "fontSize": 14,
+              "color": "#000000",
+              "backgroundColor": "transparent",
+              "borderColor": "transparent",
+              "zIndex": 12
+            },
+            "content": "@客户名称",
+            "id": "99ebf7a4-417a-461a-bce8-456378831335"
+          },
+          {
+            "type": "text",
+            "x": 154.1562689279225,
+            "y": 8,
+            "width": 64.61538461538461,
+            "height": 24.35897435897435,
+            "variable": "",
+            "printable": true,
+            "style": {
+              "fontSize": 14,
+              "color": "#000000",
+              "backgroundColor": "transparent",
+              "borderColor": "transparent",
+              "zIndex": 9
+            },
+            "content": "@业务",
+            "id": "3b5bdf21-7018-4efb-b689-d03320df70b4"
+          },
+          {
+            "type": "text",
+            "x": 8,
+            "y": 34.61538461538461,
+            "width": 117.94871794871794,
+            "height": 24.35897435897435,
+            "variable": "",
+            "printable": true,
+            "style": {
+              "fontSize": 14,
+              "color": "#000000",
+              "backgroundColor": "transparent",
+              "borderColor": "transparent",
+              "zIndex": 13
+            },
+            "content": "@产品名称",
+            "id": "1f8ed163-28aa-4769-8f68-6446d539e4a9"
+          },
+          {
+            "type": "text",
+            "x": 154.1562689279225,
+            "y": 34.61538461538461,
+            "width": 64.61538461538461,
+            "height": 24.35897435897435,
+            "variable": "",
+            "printable": true,
+            "style": {
+              "fontSize": 14,
+              "color": "#000000",
+              "backgroundColor": "transparent",
+              "borderColor": "transparent",
+              "zIndex": 10
+            },
+            "content": "@型号",
+            "id": "91bcfcf6-eb45-4a8c-8834-d0d481943920"
+          }
+        ]
+      }
+    ],
+    "canvasSize": {
+      "width": 226.7716535433071,
+      "height": 151.18110236220474
+    },
+    "pageSpacingX": 8,
+    "pageSpacingY": 8,
+    "unit": "mm",
+    "watermark": {
+      "enabled": false,
+      "text": "",
+      "angle": -30,
+      "color": "#000000",
+      "opacity": 0.1,
+      "size": 24,
+      "density": 160
+    },
+    "testData": {},
+    "guides": [],
+    "zoom": 3.9,
+    "showGrid": true,
+    "allowDragOutsideCanvas": false,
+    "headerHeight": 100,
+    "footerHeight": 100,
+    "showHeaderLine": false,
+    "showFooterLine": false,
+    "enableHeaderFooterLineRendering": false,
+    "headerLineStyle": "dashed",
+    "footerLineStyle": "dashed",
+    "headerLineColor": "#f87171",
+    "footerLineColor": "#f87171",
+    "headerLineWidth": 1,
+    "footerLineWidth": 1,
+    "headerLineSpanMode": "percent",
+    "footerLineSpanMode": "percent",
+    "headerLineSpan": 100,
+    "footerLineSpan": 100,
+    "showMinimap": false,
+    "showHistoryPanel": false,
+    "canvasBackground": "#ffffff"
+  },
+  "updatedAt": 1782357324995,
+  "permissions": {
+    "system": false,
+    "editable": true,
+    "deletable": true,
+    "copyable": true
+  },
+  "ext": {
+    "availableVariables": [
+      {
+        "id": "客户名称",
+        "label": "客户名称",
+        "children": []
+      },
+      {
+        "id": "业务",
+        "label": "业务",
+        "children": []
+      },
+      {
+        "id": "产品名称",
+        "label": "产品名称",
+        "children": []
+      },
+      {
+        "id": "型号",
+        "label": "型号",
+        "children": []
+      }
+    ],
+    "templateModalForm": {
+      "lastMode": "edit",
+      "updatedAt": 1782357324995
+    }
+  }
+}

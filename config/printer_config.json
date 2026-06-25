@@ -1,6 +1,6 @@
 {
   "mqtt": {
-    "url": "ws://10.100.10.121:8083/mqtt",
+    "url": "mqtt://127.0.0.1:1883",
     "topic": "zebra/print",
     "username": null,
     "password": null,
@@ -18,10 +18,12 @@
   "web": {
     "username": "admin",
     "password": "admin123",
+    "api_token": "wps-print-token-2026",
     "_comment": {
       "username": "Web界面登录用户名",
       "password": "Web界面登录密码",
-      "说明": "建议修改默认密码以确保安全"
+      "api_token": "WPS AirScript API Token，用于免Basic Auth的API调用",
+      "说明": "建议修改默认密码和token以确保安全"
     }
   },
   "printer": {
@@ -36,5 +38,17 @@
       "device": "设备路径 (Linux USB，如/dev/usb/lp0)",
       "说明": "配置其中一项即可，优先级: ip > name > device > 自动检测"
     }
-  }
+  },
+  "printers": [
+    {
+      "name": "钉钉智能云打印机",
+      "types": [
+        "label",
+        "pdf"
+      ],
+      "ip": null,
+      "port": 9100,
+      "device": null
+    }
+  ]
 }

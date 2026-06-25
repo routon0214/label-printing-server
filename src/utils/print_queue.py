@@ -301,6 +301,9 @@ class PrintQueue:
             elif print_type in ['escpos', 'receipt']:
                 return self._execute_escpos_print(data_format, content, printer, task_data)
             
+            elif print_type == 'pdf':
+                return self._execute_pdf_print(data_format, content, printer, task_data)
+            
             else:
                 print(f"  [错误] 不支持的打印类型: {print_type}")
                 return False
@@ -429,6 +432,94 @@ class PrintQueue:
             traceback.print_exc()
             return False
     
+    def _execute_pdf_print(self, data_format: str, content: Any,
+                           printer: Any, task_data: Dict) -> bool:
+        """执行PDF打印"""
+        try:
+            print(f"  [打印队列] 开始执行PDF打印")
+            print(f"  [打印队列] 数据格式: {data_format}")
+            
+            if data_format == 'template':
+                # 模板数据打印 - 当前由前端设计师直接处理
+                print(f"  [打印队列] 模板打印: {content.get('template_name', '未命名')}")
+                print(f"  [INFO] 模板打印由前端设计器通过浏览器打印或PDF导出完成")
+                print(f"  [INFO] 若需要后端PDF打印，请在设计师中导出PDF后通过上传打印")
+                return True
+            
+            if content is None:
+                print(f"  [错误] PDF内容为空")
+                return False
+            
+            # 处理结构化数据：转换为可打印的文本或HTML格式
+            if data_format == 'structured' and isinstance(content, dict):
+                print(f"  [打印队列] 结构化数据 -> 转换为文本文件打印")
+                import base64 as b64
+                
+                # 构建简单的文本/HTML内容
+                title = content.get('title', content.get('name', '打印文档'))
+                lines = []
+                lines.append(f"<html><head><meta charset='utf-8'><title>{self._escape_html(title)}</title></head><body>")
+                lines.append(f"<h2>{self._escape_html(title)}</h2>")
+                lines.append("<hr>")
+                
+                # 处理字段
+                fields = content.get('fields', [])
+                if fields:
+                    lines.append("<table border='1' cellpadding='5' cellspacing='0' style='border-collapse:collapse; width:100%;'>")
+                    for field in fields:
+                        if isinstance(field, dict):
+                            label = self._escape_html(field.get('label', ''))
+                            value = self._escape_html(str(field.get('value', '')))
+                            lines.append(f"<tr><td><b>{label}</b></td><td>{value}</td></tr>")
+                    lines.append("</table>")
+                
+                # 处理其他文本内容
+                text = content.get('text', '')
+                if text:
+                    lines.append(f"<p>{self._escape_html(text)}</p>")
+                
+                # 如果没有字段也没有文本，显示原始内容
+                if not fields and not text:
+                    for key, value in content.items():
+                        if key not in ('title', 'name', 'fields', 'text'):
+                            lines.append(f"<p><b>{self._escape_html(key)}:</b> {self._escape_html(str(value))}</p>")
+                
+                lines.append("</body></html>")
+                html_content = '\n'.join(lines)
+                
+                # 编码为base64
+                pdf_data = b64.b64encode(html_content.encode('utf-8')).decode('utf-8')
+                print(f"  [打印队列] 已生成HTML文档 (base64, {len(pdf_data)} 字符)")
+            
+            elif data_format == 'raw':
+                # 原始文本数据，编码为base64
+                import base64 as b64
+                print(f"  [打印队列] 原始文本数据 -> 转换为文本文件打印")
+                pdf_data = b64.b64encode(content.encode('utf-8')).decode('utf-8')
+                print(f"  [打印队列] 已编码为base64 ({len(pdf_data)} 字符)")
+            
+            else:
+                # 直接PDF/base64数据
+                pdf_data = content
+            
+            print(f"  [打印队列] 准备调用 printer.print_pdf()...")
+            result = printer.print_pdf(pdf_data)
+            print(f"  [打印队列] 打印结果: {'成功' if result else '失败'}")
+            return result
+        
+        except Exception as e:
+            print(f"  [错误] PDF打印失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    @staticmethod
+    def _escape_html(text: str) -> str:
+        """转义HTML特殊字符"""
+        if not text:
+            return ''
+        return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+    
     def get_status(self) -> Dict[str, Any]:
         """
         获取队列状态
@@ -443,6 +534,10 @@ class PrintQueue:
             'failed_count': self.failed_count,
             'success_rate': self._calculate_success_rate()
         }
+    
+    def get_queue_size(self) -> int:
+        """获取当前队列中待处理的任务数"""
+        return self.task_queue.qsize()
     
     def _calculate_success_rate(self) -> float:
         """计算成功率"""

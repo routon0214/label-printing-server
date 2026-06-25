@@ -73,12 +73,16 @@ from src.core.zpl_generator import ZPLGenerator
 from src.utils.zpl_chinese_converter import detect_and_convert_zpl
 from src.utils.log_manager import LogManager
 from src.utils.print_queue import get_print_queue
+from src.core.template_manager import TemplateManager
 
 # 创建FastAPI应用
 app = FastAPI(title="打印机Web服务", description="支持文件上传和MQTT接收的打印服务")
 
 # 日志管理器
 log_manager = LogManager(log_dir='data/logs', retention_days=7)
+
+# 模板管理器
+template_manager = TemplateManager(template_dir='data/templates')
 
 # 打印队列
 print_queue = None
@@ -116,11 +120,14 @@ async def startup_event():
     deleted_count = log_manager.clean_old_logs()
     print(f"已清理 {deleted_count} 个过期日志文件")
     
-    # 启动MQTT客户端
+    # 启动MQTT客户端（连接失败不影响Web服务）
     print("\n" + "="*70)
     print("应用启动事件 - 自动启动MQTT客户端")
     print("="*70)
-    start_mqtt_client()
+    try:
+        start_mqtt_client()
+    except Exception as e:
+        print(f"[WARNING] MQTT启动失败，Web服务继续运行: {e}")
     
     # 启动日志清理定时任务
     import asyncio
@@ -143,7 +150,10 @@ async def shutdown_event():
     
     # 停止MQTT客户端
     print("停止MQTT客户端...")
-    stop_mqtt_client()
+    try:
+        stop_mqtt_client()
+    except Exception as e:
+        print(f"[WARNING] MQTT停止异常: {e}")
 
 # 静态文件和模板（兼容打包后的环境）
 # 这些是只读资源，使用 _internal 目录
@@ -191,6 +201,8 @@ def ensure_directories():
         'data/failed_labels',
         'data/uploads',
         'data/print_queue',
+        'data/templates',
+        'data/custom-elements',
         'templates',
         'static'
     ]
@@ -224,6 +236,65 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return credentials.username
 
+
+def verify_api_token(request: Request):
+    """
+    验证 API Token（用于 WPS AirScript 等外部调用）
+    支持两种方式：
+    1. Header: X-API-Token: <token>
+    2. Header: Authorization: Bearer <token>
+    """
+    global config_manager
+    
+    if config_manager is None:
+        config_manager = ConfigManager('config/printer_config.json')
+    
+    config = config_manager.load()
+    web_config = config.get('web', {})
+    expected_token = web_config.get('api_token', '')
+    
+    if not expected_token:
+        # 未配置 token，允许所有请求（向后兼容）
+        return True
+    
+    # 方式1: X-API-Token header
+    token = request.headers.get('X-API-Token', '')
+    
+    # 方式2: Authorization: Bearer <token>
+    if not token:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
+    
+    if token != expected_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的API Token"
+        )
+    return True
+
+
+def _verify_api_key(api_key_from_body, request):
+    """认证：body api_key 或 header token 任一匹配即通过"""
+    global config_manager
+    if config_manager is None:
+        config_manager = ConfigManager('config/printer_config.json')
+    config = config_manager.load()
+    expected = config.get('web', {}).get('api_token', '')
+    if not expected:
+        return True
+    # body 中的 api_key
+    if api_key_from_body == expected:
+        return True
+    # header: X-API-Token
+    token = request.headers.get('X-API-Token', '')
+    if token == expected:
+        return True
+    # header: Authorization: Bearer
+    auth = request.headers.get('Authorization', '')
+    if auth.startswith('Bearer ') and auth[7:] == expected:
+        return True
+    return False
 
 def allowed_file(filename):
     """检查文件扩展名是否允许"""
@@ -566,12 +637,21 @@ def get_printer_instance(print_type, printer_config=None):
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, username: str = Depends(verify_credentials)):
     """首页（需要认证）"""
-    if templates is None:
-        return HTMLResponse(
-            content="<h1>错误：模板文件未找到</h1><p>请确保 templates 目录存在</p>",
-            status_code=500
-        )
-    return templates.TemplateResponse("index.html", {"request": request})
+    index_html_path = get_internal_resource_path('templates/index.html')
+    if os.path.exists(index_html_path):
+        with open(index_html_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    return HTMLResponse(
+        content="<h1>错误：页面文件未找到</h1><p>请确保 templates 目录存在</p>",
+        status_code=500
+    )
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """避免 favicon 404 错误"""
+    return HTMLResponse(content="", status_code=204)
 
 
 @app.post("/api/print")
@@ -927,6 +1007,287 @@ async def print_raw(
             status_code=500,
             content={"success": False, "error": f'处理请求时出错: {str(e)}'}
         )
+
+
+@app.post("/api/print/wps")
+async def print_wps(request: Request):
+    """
+    WPS 多维表格一键打印端点（ZPL标签打印 - 云端存储模式）
+    
+    云端不直接打印，而是将生成的 ZPL 存储为待打印任务，
+    由本地打印代理拉取后通过 USB/网络打印机实际输出。
+    
+    认证方式（优先级从高到低）：
+    1. 请求体: {"api_key": "wps-print-token-2026", ...}
+    2. Header: X-API-Token 或 Authorization: Bearer
+    
+    请求格式：
+    {
+        "api_key": "wps-print-token-2026",
+        "title": "打印标签",
+        "printer": "打印机名称（可选）",
+        "fields": [
+            {"label": "商品名称", "value": "测试商品"},
+            {"label": "条码", "value": "6901234567890"}
+        ],
+        "barcode": "6901234567890",
+        "qrcode": "https://example.com/123"
+    }
+    """
+    try:
+        data = await request.json()
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的JSON数据，需要JSON对象"}
+            )
+        
+        # 认证：优先 body api_key，其次 header
+        api_key = data.get('api_key', '')
+        if not _verify_api_key(api_key, request):
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "error": "无效的API Token"}
+            )
+        
+        # 提取打印参数
+        title = data.get('title', 'WPS标签')
+        printer_name = data.get('printer', '')
+        fields = data.get('fields', [])
+        barcode = data.get('barcode', '')
+        qrcode = data.get('qrcode', '')
+        
+        # 如果没有指定 fields，可以接受平铺的 key-value
+        if not fields:
+            exclude_keys = {'title', 'printer', 'barcode', 'qrcode', 'fields'}
+            for key, value in data.items():
+                if key not in exclude_keys:
+                    fields.append({"label": key, "value": str(value)})
+        
+        if not fields:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "缺少打印字段（fields为空且无其他字段）"}
+            )
+        
+        # 构建 label_data 格式（兼容 generate_label_zpl）
+        label_data = {
+            "title": title,
+            "fields": fields
+        }
+        if barcode:
+            label_data["barcode"] = str(barcode)
+        if qrcode:
+            label_data["qrcode"] = str(qrcode)
+        
+        # 生成 ZPL 代码
+        zpl_code = zpl_generator.generate_label_zpl(label_data)
+        
+        # 自动检测并转换中文
+        zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+        if was_converted:
+            print("  [OK] ZPL中文已自动转换为图像")
+        
+        # 生成任务 ID 并保存到待打印队列
+        import uuid
+        job_id = f"job_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        job_data = {
+            "job_id": job_id,
+            "title": title,
+            "zpl_code": zpl_code,
+            "printer_name": printer_name,
+            "fields_count": len(fields),
+            "barcode": barcode if barcode else "",
+            "qrcode": qrcode if qrcode else "",
+            "status": "pending",
+            "created_at": datetime.datetime.now().isoformat(),
+            "updated_at": datetime.datetime.now().isoformat()
+        }
+        
+        # 保存任务文件
+        pending_dir = 'data/pending_jobs'
+        os.makedirs(pending_dir, exist_ok=True)
+        job_file = os.path.join(pending_dir, f'{job_id}.json')
+        with open(job_file, 'w', encoding='utf-8') as f:
+            json.dump(job_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"[WPS打印] 标题: {title}, 任务ID: {job_id} (已存储，等待本地代理拉取)")
+        
+        return JSONResponse({
+            "success": True,
+            "message": f'标签"{title}"已加入待打印队列',
+            "job_id": job_id,
+            "printer": printer_name or "默认打印机",
+            "fields_count": len(fields),
+            "hint": "请确保本地打印代理(print_agent.py)正在运行"
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'打印处理出错: {str(e)}'}
+        )
+
+
+@app.get("/api/print/wps/pending")
+async def get_pending_print_jobs(_: bool = Depends(verify_api_token)):
+    """
+    获取待打印任务（供本地打印代理拉取）
+    
+    返回最旧的一个 pending 任务，并将其状态改为 processing
+    一次只返回一个任务，确保按顺序打印
+    """
+    pending_dir = 'data/pending_jobs'
+    os.makedirs(pending_dir, exist_ok=True)
+    
+    # 查找所有 pending 状态的任务文件
+    pending_jobs = []
+    for filename in os.listdir(pending_dir):
+        if not filename.endswith('.json'):
+            continue
+        filepath = os.path.join(pending_dir, filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                job = json.load(f)
+            if job.get('status') == 'pending':
+                pending_jobs.append((filepath, job))
+        except:
+            continue
+    
+    if not pending_jobs:
+        return JSONResponse({
+            "success": True,
+            "has_jobs": False,
+            "message": "无待打印任务"
+        })
+    
+    # 按创建时间排序，取最旧的
+    pending_jobs.sort(key=lambda x: x[1].get('created_at', ''))
+    filepath, job = pending_jobs[0]
+    
+    # 标记为 processing
+    job['status'] = 'processing'
+    job['updated_at'] = datetime.datetime.now().isoformat()
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(job, f, ensure_ascii=False, indent=2)
+    
+    print(f"[拉取任务] {job['job_id']} → processing")
+    
+    return JSONResponse({
+        "success": True,
+        "has_jobs": True,
+        "job_id": job['job_id'],
+        "title": job['title'],
+        "zpl_code": job['zpl_code'],
+        "printer_name": job.get('printer_name', ''),
+        "barcode": job.get('barcode', ''),
+        "qrcode": job.get('qrcode', ''),
+        "created_at": job['created_at']
+    })
+
+
+@app.post("/api/print/wps/result")
+async def report_print_result(request: Request, _: bool = Depends(verify_api_token)):
+    """
+    上报打印结果（供本地打印代理调用）
+    
+    请求格式:
+    {
+        "job_id": "job_20260625_xxx",
+        "success": true,
+        "error": ""  // 失败时的错误信息
+    }
+    """
+    try:
+        data = await request.json()
+        job_id = data.get('job_id', '')
+        success = data.get('success', False)
+        error_msg = data.get('error', '')
+        
+        if not job_id:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "缺少 job_id"}
+            )
+        
+        # 查找并更新任务状态
+        pending_dir = 'data/pending_jobs'
+        job_file = os.path.join(pending_dir, f'{job_id}.json')
+        
+        if not os.path.exists(job_file):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f'任务不存在: {job_id}'}
+            )
+        
+        with open(job_file, 'r', encoding='utf-8') as f:
+            job = json.load(f)
+        
+        job['status'] = 'done' if success else 'failed'
+        job['updated_at'] = datetime.datetime.now().isoformat()
+        if error_msg:
+            job['error'] = error_msg
+        
+        with open(job_file, 'w', encoding='utf-8') as f:
+            json.dump(job, f, ensure_ascii=False, indent=2)
+        
+        status_text = '完成' if success else '失败'
+        print(f"[打印结果] {job_id} → {status_text}" + (f' ({error_msg})' if error_msg else ''))
+        
+        return JSONResponse({
+            "success": True,
+            "message": f'任务 {job_id} 状态更新为 {status_text}'
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'处理出错: {str(e)}'}
+        )
+
+
+@app.get("/api/print/wps/status")
+async def get_print_queue_status(_: bool = Depends(verify_api_token)):
+    """
+    查询待打印队列状态（供调试/监控）
+    """
+    pending_dir = 'data/pending_jobs'
+    os.makedirs(pending_dir, exist_ok=True)
+    
+    stats = {'pending': 0, 'processing': 0, 'done': 0, 'failed': 0, 'total': 0}
+    recent_jobs = []
+    
+    for filename in os.listdir(pending_dir):
+        if not filename.endswith('.json'):
+            continue
+        filepath = os.path.join(pending_dir, filename)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                job = json.load(f)
+            status = job.get('status', 'unknown')
+            stats[status] = stats.get(status, 0) + 1
+            stats['total'] += 1
+            recent_jobs.append({
+                "job_id": job['job_id'],
+                "title": job['title'],
+                "status": status,
+                "created_at": job.get('created_at', '')
+            })
+        except:
+            continue
+    
+    # 按时间倒序
+    recent_jobs.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return JSONResponse({
+        "success": True,
+        "stats": stats,
+        "recent_jobs": recent_jobs[:20]
+    })
 
 
 @app.get("/api/status")
@@ -1736,6 +2097,279 @@ async def send_mqtt_message(
         )
 
 
+# ============================================================
+# 模板设计器 API (vue-print-designer CRUD)
+# ============================================================
+
+@app.get("/designer", response_class=HTMLResponse)
+async def designer_page(request: Request, username: str = Depends(verify_credentials)):
+    """标签设计器页面"""
+    designer_html_path = get_internal_resource_path('templates/designer.html')
+    if os.path.exists(designer_html_path):
+        with open(designer_html_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    return HTMLResponse(
+        content="<h1>错误：设计师页面未找到</h1><p>请确保 designer.html 存在</p>",
+        status_code=500
+    )
+
+
+@app.get("/api/print/templates")
+async def list_templates(username: str = Depends(verify_credentials)):
+    """列出所有模板"""
+    try:
+        template_list = template_manager.list_templates(include_data=False)
+        return JSONResponse({
+            "success": True,
+            "templates": template_list,
+            "count": len(template_list)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取模板列表失败: {str(e)}'}
+        )
+
+
+@app.get("/api/print/templates/{template_id}")
+async def get_template(template_id: str, username: str = Depends(verify_credentials)):
+    """获取单个模板详情"""
+    try:
+        template = template_manager.get_template(template_id)
+        if template is None:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"模板 '{template_id}' 不存在"}
+            )
+        return JSONResponse({
+            "success": True,
+            "template": template
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'获取模板失败: {str(e)}'}
+        )
+
+
+@app.post("/api/print/templates")
+async def upsert_template(request: Request, username: str = Depends(verify_credentials)):
+    """创建或更新模板"""
+    try:
+        data = await request.json()
+        if not data or not isinstance(data, dict):
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的模板数据"}
+            )
+
+        template_id = data.get('id', '')
+        if not template_id:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "模板必须包含 id 字段"}
+            )
+
+        saved_template = template_manager.upsert_template(data)
+        print(f"[模板] 保存模板: {saved_template.get('name')} ({saved_template.get('id')})")
+        return JSONResponse({
+            "success": True,
+            "message": "模板保存成功",
+            "id": saved_template['id'],
+            "template": saved_template
+        })
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "JSON格式错误"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'保存模板失败: {str(e)}'}
+        )
+
+
+@app.delete("/api/print/templates/{template_id}")
+async def delete_template(template_id: str, username: str = Depends(verify_credentials)):
+    """删除模板"""
+    try:
+        result = template_manager.delete_template(template_id)
+        if not result:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"模板 '{template_id}' 不存在"}
+            )
+        print(f"[模板] 删除模板: {template_id}")
+        return JSONResponse({
+            "success": True,
+            "message": f"模板 '{template_id}' 已删除"
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'删除模板失败: {str(e)}'}
+        )
+
+
+@app.post("/api/print/from-template")
+async def print_from_template(request: Request, username: str = Depends(verify_credentials)):
+    """根据模板和变量数据打印"""
+    try:
+        data = await request.json()
+        if not data:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "无效的JSON数据"}
+            )
+
+        template_id = data.get('template_id', '')
+        variables = data.get('variables', {})
+        print_type = data.get('print_type', 'pdf')
+
+        if not template_id:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "缺少 template_id 字段"}
+            )
+
+        # 获取模板数据
+        template = template_manager.get_template(template_id)
+        if not template:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"模板 '{template_id}' 不存在"}
+            )
+
+        template_name = template.get('name', '未命名模板')
+        print(f"[模板打印] {template_name} (ID: {template_id})")
+
+        print_queue_obj = get_print_queue()
+        printer = get_printer_instance(print_type)
+
+        # 构建打印数据
+        print_data = {
+            'print_type': print_type,
+            'format': 'template',
+            'content': {
+                'template_id': template_id,
+                'template_name': template_name,
+                'variables': variables
+            }
+        }
+
+        task_id = print_queue_obj.add_task(print_data, printer)
+        print(f"[模板打印] 已入队 - 任务ID: {task_id}")
+
+        return JSONResponse({
+            "success": True,
+            "message": f"模板 '{template_name}' 已加入打印队列",
+            "task_id": task_id,
+            "queue_size": print_queue_obj.get_queue_size()
+        })
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "JSON格式错误"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": f'模板打印失败: {str(e)}'}
+        )
+
+
+# ============================================================
+# 自定义元素 API（设计器复用组件）
+# ============================================================
+
+@app.get("/api/print/custom-elements")
+async def list_custom_elements(username: str = Depends(verify_credentials)):
+    """列出所有自定义元素"""
+    try:
+        # 自定义元素暂存于 data/custom-elements 目录
+        elements_dir = get_resource_path('data/custom-elements')
+        os.makedirs(elements_dir, exist_ok=True)
+        
+        elements = []
+        if os.path.exists(elements_dir):
+            for fname in os.listdir(elements_dir):
+                if fname.endswith('.json'):
+                    try:
+                        with open(os.path.join(elements_dir, fname), 'r', encoding='utf-8') as f:
+                            el = json.load(f)
+                            elements.append({
+                                'id': el.get('id'),
+                                'name': el.get('name'),
+                                'updatedAt': el.get('updatedAt', 0)
+                            })
+                    except:
+                        pass
+        
+        return JSONResponse({"success": True, "customElements": elements})
+    except Exception as e:
+        return JSONResponse(
+            status_code=500, 
+            content={"success": False, "error": str(e)}
+        )
+
+
+@app.get("/api/print/custom-elements/{element_id}")
+async def get_custom_element(element_id: str, username: str = Depends(verify_credentials)):
+    """获取单个自定义元素"""
+    elements_dir = get_resource_path('data/custom-elements')
+    file_path = os.path.join(elements_dir, f"{element_id}.json")
+    if not os.path.exists(file_path):
+        return JSONResponse(status_code=404, content={"success": False, "error": "元素不存在"})
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return JSONResponse({"success": True, "customElement": json.load(f)})
+    except:
+        return JSONResponse(status_code=500, content={"success": False, "error": "读取失败"})
+
+
+@app.post("/api/print/custom-elements")
+async def upsert_custom_element(request: Request, username: str = Depends(verify_credentials)):
+    """创建或更新自定义元素"""
+    try:
+        data = await request.json()
+        if not data or not data.get('id'):
+            return JSONResponse(status_code=400, content={"success": False, "error": "无效数据"})
+        
+        elements_dir = get_resource_path('data/custom-elements')
+        os.makedirs(elements_dir, exist_ok=True)
+        file_path = os.path.join(elements_dir, f"{data['id']}.json")
+        
+        data['updatedAt'] = data.get('updatedAt', int(__import__('time').time() * 1000))
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        return JSONResponse({"success": True, "id": data['id']})
+    except:
+        return JSONResponse(status_code=500, content={"success": False, "error": "保存失败"})
+
+
+@app.delete("/api/print/custom-elements/{element_id}")
+async def delete_custom_element(element_id: str, username: str = Depends(verify_credentials)):
+    """删除自定义元素"""
+    elements_dir = get_resource_path('data/custom-elements')
+    file_path = os.path.join(elements_dir, f"{element_id}.json")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return JSONResponse({"success": True, "message": "已删除"})
+    return JSONResponse(status_code=404, content={"success": False, "error": "元素不存在"})
+
 if __name__ == '__main__':
     # 确保目录存在
     ensure_directories()
@@ -1761,6 +2395,17 @@ if __name__ == '__main__':
     
     start_mqtt_client()
     
+    print("\n" + "=" * 70)
+    print("Web服务启动中...")
+    print("访问地址: http://127.0.0.1:8000")
+    print("=" * 70)
+    print()
+    
+    # 启动FastAPI应用
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    except KeyboardInterrupt:
+        print("\n\nWeb服务已停止")
     print("\n" + "=" * 70)
     print("Web服务启动中...")
     print("访问地址: http://127.0.0.1:8000")

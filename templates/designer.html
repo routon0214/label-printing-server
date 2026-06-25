@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>标签设计器 - 斑马打印机标签打印服务</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/print-designer/print-designer.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 顶部导航栏 */
+        .top-bar {
+            background: #2c3e50;
+            color: white;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 50px;
+            min-height: 50px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1000;
+        }
+
+        .top-bar .logo {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .top-bar .logo a {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .top-bar .logo a:hover {
+            opacity: 0.9;
+        }
+
+        .top-bar .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .top-bar .nav-links a {
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .top-bar .nav-links a:hover {
+            background: rgba(255,255,255,0.15);
+            color: white;
+        }
+
+        .top-bar .nav-links a.active {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        /* 提示标签 */
+        .designer-hint {
+            background: #fff3cd;
+            border-bottom: 1px solid #ffc107;
+            padding: 8px 20px;
+            font-size: 13px;
+            color: #856404;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 20px;
+        }
+
+        .designer-hint .close-hint {
+            margin-left: auto;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 16px;
+            color: #856404;
+            padding: 2px 6px;
+        }
+
+        /* 设计器容器 */
+        .designer-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .designer-container print-designer {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* 加载状态 */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+            transition: opacity 0.3s;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e0e0e0;
+            border-top-color: #2c3e50;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 12px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <div class="top-bar">
+        <div class="logo">
+            <a href="/">
+                <span>🖨️</span>
+                <span>斑马打印机标签打印服务</span>
+            </a>
+        </div>
+        <div class="nav-links">
+            <a href="/">📤 打印测试</a>
+            <a href="/designer" class="active">🎨 标签设计</a>
+        </div>
+    </div>
+
+    <!-- 提示信息 -->
+    <div class="designer-hint" id="designer-hint">
+        💡 <strong>提示：</strong>拖拽左侧元素到画布中设计标签，支持条码、二维码、文本、图片等。设计完保存为模板后可在打印页面中使用。
+        <button class="close-hint" onclick="document.getElementById('designer-hint').style.display='none'">✕</button>
+    </div>
+
+    <!-- 设计器容器 -->
+    <div class="designer-container" id="designer-container">
+        <!-- 加载中遮罩 -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">正在加载设计器...</div>
+        </div>
+
+        <!-- vue-print-designer Web Component -->
+        <print-designer 
+            id="print-designer"
+            lang="zh"
+        ></print-designer>
+    </div>
+
+    <!-- process.env 浏览器 polyfill（修复 process is not defined 错误） -->
+    <script>
+        window.process = window.process || { env: { NODE_ENV: 'production' } };
+    </script>
+
+    <!-- 加载 vue-print-designer -->
+    <script type="module">
+        import "/static/print-designer/print-designer.es.js";
+    </script>
+
+    <script>
+        (function() {
+            const designerEl = document.getElementById('print-designer');
+            const loadingOverlay = document.getElementById('loading-overlay');
+
+            /**
+             * 从模板数据中自动提取所有 @变量名
+             * 支持从 content 字段（如 "产品名称：@name"）和 variable 字段提取
+             */
+            function extractVariablesFromTemplate(templateData) {
+                if (!templateData || !templateData.pages) return [];
+                const vars = new Set();
+                
+                function scanText(text) {
+                    if (typeof text !== 'string') return;
+                    // 匹配 @变量名 格式（支持中文、英文、下划线）
+                    const matches = text.match(/@([\w\u4e00-\u9fff]+)/g);
+                    if (matches) {
+                        matches.forEach(m => vars.add(m.slice(1))); // 去掉 @ 前缀
+                    }
+                }
+
+                templateData.pages.forEach(page => {
+                    if (!page.elements) return;
+                    page.elements.forEach(el => {
+                        // 扫描 content 字段
+                        scanText(el.content);
+                        // 扫描 variable 字段
+                        scanText(el.variable);
+                        // 条码的内容
+                        scanText(el.data);
+                    });
+                });
+
+                return Array.from(vars);
+            }
+
+            /**
+             * 同步变量到设计师面板
+             */
+            function syncVariablesToDesigner() {
+                try {
+                    const templateData = designerEl.getTemplateData();
+                    if (!templateData) return;
+                    
+                    const varNames = extractVariablesFromTemplate(templateData);
+                    if (varNames.length === 0) return;
+
+                    // 构建变量树结构
+                    const variableTree = varNames.map(name => ({
+                        id: name,
+                        label: name,
+                        children: []
+                    }));
+
+                    designerEl.setAvailableVariables(variableTree);
+                    console.log('[Designer] 自动同步变量:', varNames);
+                } catch (e) {
+                    // 忽略同步错误
+                }
+            }
+
+            // 监听设计师就绪事件
+            designerEl.addEventListener('ready', () => {
+                console.log('[Designer] print-designer 已就绪');
+                loadingOverlay.classList.add('hidden');
+
+                // 设置为远程模式，启用后端 CRUD API
+                designerEl.setCrudMode('remote');
+
+                // 配置 CRUD 端点（使用默认路径，与后端 API 一致）
+                designerEl.setCrudEndpoints({
+                    baseUrl: '',
+                    templates: {
+                        list: '/api/print/templates',
+                        get: '/api/print/templates/{id}',
+                        upsert: '/api/print/templates',
+                        delete: '/api/print/templates/{id}'
+                    }
+                }, {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                // 设置打印默认值
+                designerEl.setPrintDefaults({
+                    printMode: 'local',
+                    silentPrint: false,
+                    exportImageMerged: true
+                });
+
+                console.log('[Designer] CRUD 端点已配置为远程模式');
+
+                // 初始同步变量
+                setTimeout(syncVariablesToDesigner, 1000);
+            });
+
+            // 监听模板导出/保存事件（保存时自动同步变量）
+            designerEl.addEventListener('exported', (e) => {
+                console.log('[Designer] 导出完成，同步变量...');
+                setTimeout(syncVariablesToDesigner, 500);
+            });
+
+            // 监听设计师事件
+            designerEl.addEventListener('print', (e) => {
+                console.log('[Designer] 打印请求:', e.detail);
+            });
+
+            designerEl.addEventListener('printed', (e) => {
+                console.log('[Designer] 打印完成:', e.detail);
+            });
+
+            designerEl.addEventListener('export', (e) => {
+                console.log('[Designer] 导出请求:', e.detail);
+            });
+
+            designerEl.addEventListener('progress', (e) => {
+                const p = e.detail;
+                if (p && p.percent !== undefined) {
+                    console.log(`[Designer] ${p.scope} 进度: ${p.percent}% - ${p.message}`);
+                }
+            });
+
+            designerEl.addEventListener('error', (e) => {
+                console.error('[Designer] 错误:', e.detail);
+            });
+
+            // 超时处理
+            setTimeout(() => {
+                if (!loadingOverlay.classList.contains('hidden')) {
+                    loadingOverlay.classList.add('hidden');
+                    console.warn('[Designer] 加载超时，可能设计器未正确初始化');
+                }
+            }, 15000);
+
+            // 定期同步变量（每5秒检查一次画布变化）
+            setInterval(syncVariablesToDesigner, 5000);
+        })();
+    </script>
+</body>
+</html>
