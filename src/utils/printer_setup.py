@@ -231,6 +231,7 @@ def add_printer_to_config(config_file, printer_name, printer_types=None, is_defa
             "ip": None,
             "port": 9100,
             "device": None,
+            "language": "zpl",
             "default": is_default
         }
         

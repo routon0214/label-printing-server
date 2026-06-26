@@ -303,11 +303,13 @@ def create_default_config(config_file='config/printer_config.json'):
             "ip": None,
             "port": 9100,
             "device": None,
+            "language": "zpl",
             "_comment": {
                 "name": "打印机名称 (Windows/CUPS)",
                 "ip": "打印机IP地址（网络打印，所有平台通用）",
                 "port": "网络打印端口（默认9100）",
                 "device": "设备路径 (Linux USB，如/dev/usb/lp0)",
+                "language": "打印机语言: zpl(直通) | tspl(自动转换) | null=自动检测",
                 "说明": "配置其中一项即可，优先级: ip > name > device > 自动检测"
             }
         }

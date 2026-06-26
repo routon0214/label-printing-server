@@ -353,9 +353,19 @@ class PrintQueue:
                     # 转换失败不影响打印，继续使用原始代码
             
             elif data_format == 'structured':
-                # 结构化数据，生成ZPL
+                # 结构化数据，生成ZPL（旧版兼容）
                 print("  [INFO] 从结构化数据生成ZPL...")
                 zpl_code = zpl_generator.generate_label_zpl(content)
+                print(f"  [打印队列] 生成的ZPL代码长度: {len(zpl_code) if zpl_code else 0} 字符")
+            
+            elif data_format == 'designer_template':
+                # 设计师模板数据，直接按位置生成ZPL
+                print("  [INFO] 从设计师模板生成ZPL（保留坐标）...")
+                template_data = content.get('template_data', {})
+                variables = content.get('variables', {})
+                print(f"  [打印队列] 模板数据: pages={len(template_data.get('pages', []))}, elements={sum(len(p.get('elements', [])) for p in template_data.get('pages', []))}")
+                print(f"  [打印队列] 变量数据: {len(variables)} 个变量")
+                zpl_code = zpl_generator.generate_label_zpl_from_template(template_data, variables)
                 print(f"  [打印队列] 生成的ZPL代码长度: {len(zpl_code) if zpl_code else 0} 字符")
             
             else:

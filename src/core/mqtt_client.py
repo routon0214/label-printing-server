@@ -268,7 +268,8 @@ class LabelPrintMQTT:
             printer_name=cfg.get('name'),
             printer_ip=cfg.get('ip'),
             printer_port=cfg.get('port', 9100),
-            device_path=cfg.get('device')
+            device_path=cfg.get('device'),
+            printer_language=cfg.get('language', None)
         )
     
     def _create_pdf_printer(self, cfg):

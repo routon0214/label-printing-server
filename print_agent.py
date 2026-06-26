@@ -54,7 +54,7 @@ API_TOKEN = 'wps-print-token-2026'
 
 # 默认打印机名称（任务未指定打印机时使用）
 # 名称在 Windows「设置→蓝牙和其他设备→打印机和扫描仪」中查看
-DEFAULT_PRINTER_NAME = 'Deli DL-888T'
+DEFAULT_PRINTER_NAME = 'Deli DL-825T(NEW)'
 
 # 多打印机路由（可选）
 # 本代理会自动根据任务中的 printer 字段匹配本机打印机名称
@@ -62,6 +62,12 @@ DEFAULT_PRINTER_NAME = 'Deli DL-888T'
 # 如果任务未指定打印机，使用上方的 DEFAULT_PRINTER_NAME
 #
 # 示例：WPS 提交 {"printer": "Deli DL-825T"} → 代理路由到 "Deli DL-825T(NEW)"
+#
+# 设为 True 则忽略任务指定的打印机，始终使用 DEFAULT_PRINTER_NAME
+FORCE_DEFAULT_PRINTER = True
+
+# 打印机语言: 'zpl'(直通ZPL) | 'tspl'(ZPL→TSPL转换) | None(自动检测)
+DEFAULT_PRINTER_LANGUAGE = 'tspl'
 
 # 轮询间隔（秒），建议 3-10 秒
 POLL_INTERVAL = 5
@@ -178,7 +184,7 @@ def main():
         if not printer_name:
             printer_name = DEFAULT_PRINTER_NAME
         if printer_name not in printer_cache:
-            printer_cache[printer_name] = ZebraPrinter(printer_name=printer_name)
+            printer_cache[printer_name] = ZebraPrinter(printer_name=printer_name, printer_language=DEFAULT_PRINTER_LANGUAGE)
         return printer_cache[printer_name]
     
     while True:
@@ -189,10 +195,14 @@ def main():
                 job_id = job['job_id']
                 title = job['title']
                 zpl_code = job['zpl_code']
-                target_printer = job.get('printer_name', '').strip() or DEFAULT_PRINTER_NAME
+                target_printer = None
+                if not FORCE_DEFAULT_PRINTER:
+                    target_printer = job.get('printer_name', '').strip()
+                if not target_printer:
+                    target_printer = DEFAULT_PRINTER_NAME
                 
                 log(f"[JOB] 发现任务: {job_id} - {title}")
-                log(f"   目标打印机: {target_printer}")
+                log(f"   任务指定: {job.get('printer_name', '(无)')} → 使用: {target_printer}")
                 log(f"   ZPL长度: {len(zpl_code)} 字符")
                 
                 # 执行打印

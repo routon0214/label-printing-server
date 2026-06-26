@@ -11,6 +11,7 @@ ZPL 坐标单位: dots (203 DPI, 1mm ≈ 8 dots)
 
 import json
 import os
+import unicodedata
 from typing import Dict, Any, Optional, List
 from src.utils.image_utils import text_to_image_zpl
 
@@ -103,10 +104,28 @@ class TemplateRenderer:
         return '\n'.join(zpl_parts)
 
     def _resolve_variable(self, content: str, variables: Dict[str, str]) -> str:
-        """替换 @变量名 为实际值"""
+        """替换 @变量名 为实际值，支持 Unicode 多形态匹配"""
         if not content or not content.startswith('@'):
             return content
         var_name = content[1:]  # 去掉 @ 前缀
+        
+        # 1. 直接匹配
+        if var_name in variables:
+            return variables[var_name]
+        
+        # 2. Unicode NFC/NFD 标准化匹配
+        var_nfc = unicodedata.normalize('NFC', var_name)
+        for k, v in variables.items():
+            if unicodedata.normalize('NFC', k) == var_nfc:
+                return v
+        
+        # 3. 去除两端空白后匹配
+        var_stripped = var_name.strip()
+        if var_stripped != var_name and var_stripped in variables:
+            return variables[var_stripped]
+        
+        # 未找到：打印诊断信息
+        print(f"[WARN] 模板变量 '@{var_name}' 未找到！可用变量: {list(variables.keys())[:10]}")
         return variables.get(var_name, content)
 
     def _render_element(self, element: Dict, variables: Dict, unit: str) -> Optional[str]:

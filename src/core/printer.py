@@ -11,11 +11,17 @@ import platform
 import re
 from src.utils.fuzzy_match import find_best_printer, fuzzy_match_printer
 
+# TSPL 模式检测关键词
+TSPL_PRINTER_PATTERNS = ['825T', 'DL-', 'TSC', 'tsc', 'deli', 'DELI', 'Deli']
+
+# 真正的 Zebra 品牌打印机关键词（用于 SGD 初始化等 Zebra 专有功能）
+ZEBRA_PRINTER_PATTERNS = ['zebra', 'ZT', 'ZD', 'ZDesigner', 'ZP', 'GC', 'GK', 'GT']
+
 
 class ZebraPrinter:
     """斑马打印机类（跨平台）"""
     
-    def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None, remove_newlines=None):
+    def __init__(self, printer_name=None, printer_ip=None, printer_port=9100, device_path=None, remove_newlines=None, printer_language=None):
         """
         初始化打印机
         
@@ -25,6 +31,7 @@ class ZebraPrinter:
             printer_port: 打印机端口（网络打印，默认9100）
             device_path: 设备路径（Linux直接访问，如/dev/usb/lp0）
             remove_newlines: 是否移除ZPL代码中的换行符（已废弃，现在自动检测）
+            printer_language: 打印机语言 ('zpl'|'tspl'|None=自动检测)
         """
         self.system = platform.system()
         self.printer_ip = printer_ip
@@ -35,14 +42,46 @@ class ZebraPrinter:
         # 自动检测架构并设置换行符处理方式
         self.remove_newlines = self._auto_detect_newlines_handling()
         
+        # 打印机语言模式: 'zpl' | 'tspl' | None=自动检测
+        # 'auto' 字符串等同于 None（自动检测）
+        if printer_language == 'auto':
+            printer_language = None
+        self.printer_language = printer_language or 'zpl'
+        
         # 如果提供了打印机名称，尝试模糊匹配
         if printer_name:
             self.printer_name = self._fuzzy_find_printer(printer_name)
+            # 自动检测 TSPL 模式
+            if self.printer_name and not printer_language:
+                self.printer_language = self._detect_language(self.printer_name)
         
         # 如果没有配置或模糊匹配失败，自动检测
         if not self.printer_name and not self.printer_ip and not self.device_path:
             self._auto_detect()
     
+    def _detect_language(self, printer_name):
+        """
+        根据打印机名称自动检测语言模式
+        
+        Returns:
+            str: 'zpl' 或 'tspl'
+        """
+        for pattern in TSPL_PRINTER_PATTERNS:
+            if pattern.lower() in printer_name.lower():
+                print(f"[DETECT] 检测到 TSC 打印机: {printer_name}，使用 TSPL 模式")
+                return 'tspl'
+        return 'zpl'
+
+    def _is_zebra_printer(self):
+        """检测是否为真正的 Zebra 品牌打印机（用于 SGD 等专有功能）"""
+        if not self.printer_name:
+            return False
+        name_lower = self.printer_name.lower()
+        for pattern in ZEBRA_PRINTER_PATTERNS:
+            if pattern.lower() in name_lower:
+                return True
+        return False
+
     def _auto_detect_newlines_handling(self):
         """
         根据系统架构自动检测换行符处理方式
@@ -139,6 +178,36 @@ class ZebraPrinter:
         
         return None
     
+    def _debug_save(self, zpl_code, output_bytes=None, suffix='zpl'):
+        """保存打印数据到文件，方便诊断
+        
+        Args:
+            zpl_code: 原始 ZPL 代码
+            output_bytes: 转换/规范化后的输出 bytes（None 则保存原始 ZPL）
+            suffix: 文件后缀 ('zpl' | 'tspl')
+        """
+        debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'debug')
+        os.makedirs(debug_dir, exist_ok=True)
+        ts = __import__('time').strftime('%Y%m%d_%H%M%S')
+        # 保存原始 ZPL
+        zpl_path = os.path.join(debug_dir, f'zpl_input_{ts}.txt')
+        with open(zpl_path, 'w', encoding='utf-8') as f:
+            f.write(zpl_code)
+        print(f"[DEBUG] ZPL 已保存: {zpl_path} ({len(zpl_code)} 字符)")
+        # 保存输出数据
+        if output_bytes:
+            out_path = os.path.join(debug_dir, f'{suffix}_output_{ts}.txt')
+            mode = 'wb' if isinstance(output_bytes, bytes) else 'w'
+            encoding = None if mode == 'wb' else 'utf-8'
+            params = {}
+            if encoding:
+                params['encoding'] = encoding
+            with open(out_path, mode, **params) as f:
+                f.write(output_bytes)
+            preview = output_bytes.decode('utf-8', errors='replace')[:500] if isinstance(output_bytes, bytes) else output_bytes[:500]
+            print(f"[DEBUG] {suffix.upper()} 已保存: {out_path} ({len(output_bytes)} bytes)")
+            print(f"[DEBUG] {suffix.upper()} 预览:\n{preview}")
+
     def _auto_detect(self):
         """自动检测打印机"""
         if self.system == 'Windows':
@@ -251,7 +320,7 @@ class ZebraPrinter:
     
     def _normalize_zpl(self, zpl_code):
         """
-        规范化ZPL代码：根据架构自动处理换行符
+        规范化ZPL代码：根据打印机类型和架构自动处理换行符
         
         Args:
             zpl_code: 原始ZPL代码
@@ -265,13 +334,18 @@ class ZebraPrinter:
         # 统一换行符格式
         zpl_code = zpl_code.replace('\r\n', '\n').replace('\r', '\n')
         
-        # 根据架构自动处理换行符
-        if self.remove_newlines:
-            # 移除所有换行符（Windows/Linux x86）
+        # 非 Zebra 打印机（如得力）：保留换行符，帮助固件正确解析 ZPL 命令
+        is_zebra = self._is_zebra_printer()
+        
+        if self.remove_newlines and is_zebra:
+            # 真正的 Zebra 打印机：移除所有换行符（Windows/Linux x86）
             zpl_code = zpl_code.replace('\n', '')
         else:
-            # 保留换行符，但清理多余的空白行（Linux ARM）
+            # 非 Zebra 打印机或 ARM 架构：保留换行符，清理多余空白行
             zpl_code = re.sub(r'\n{3,}', '\n\n', zpl_code)
+            # 非 Zebra 打印机（TSC/Deli 固件）：使用 \r\n 行尾（TSC 固件要求）
+            if not is_zebra:
+                zpl_code = zpl_code.replace('\n', '\r\n')
         
         # 确保ZPL代码以 ^XZ 结束
         if not zpl_code.endswith('^XZ'):
@@ -284,30 +358,66 @@ class ZebraPrinter:
         打印标签（跨平台）
         
         Args:
-            zpl_code: ZPL命令
+            zpl_code: ZPL命令（TSPL 模式会自动转换）
             
         Returns:
             bool: 是否成功
         """
-        # 规范化ZPL代码
-        zpl_code = self._normalize_zpl(zpl_code)
+        # ── TSPL 模式：转换 ZPL → TSPL ──
+        if self.printer_language == 'tspl':
+            try:
+                from src.utils.zpl_to_tspl import zpl_to_tspl
+                tspl_bytes = zpl_to_tspl(zpl_code)
+
+                # ── DEBUG: 保存转换结果到文件 ──
+                self._debug_save(zpl_code, tspl_bytes, suffix='tspl')
+
+                return self._print_raw(tspl_bytes)
+            except ImportError as e:
+                print(f"[ERROR] 无法导入 TSPL 转换器: {e}")
+                return False
+            except Exception as e:
+                print(f"[ERROR] ZPL→TSPL 转换失败: {e}")
+                traceback = __import__('traceback')
+                traceback.print_exc()
+                return False
         
+        # ── ZPL 模式：直通逻辑 ──
+        # 规范化ZPL代码
+        zpl_normalized = self._normalize_zpl(zpl_code)
+        zpl_bytes = zpl_normalized.encode('utf-8')
+        
+        # ── DEBUG: 保存 ZPL 输出到文件 ──
+        self._debug_save(zpl_code, zpl_normalized, suffix='zpl')
+        
+        return self._print_raw(zpl_bytes)
+    
+    def _print_raw(self, data: bytes):
+        """
+        发送原始数据到打印机
+        
+        Args:
+            data: 要发送的 bytes
+            
+        Returns:
+            bool: 是否成功
+        """
         # 优先使用网络打印（所有平台通用）
         if self.printer_ip:
-            return self._print_network(zpl_code)
+            return self._print_network_bytes(data)
         
         # Windows打印
         if self.system == 'Windows':
-            return self._print_windows(zpl_code)
+            return self._print_windows_bytes(data)
         
         # Linux打印
         elif self.system == 'Linux':
             # 优先CUPS
             if self.printer_name:
-                return self._print_cups(zpl_code)
+                return self._print_cups_bytes(data)
             # 其次USB设备
             elif self.device_path:
-                return self._print_device(zpl_code)
+                return self._print_device_bytes(data)
             else:
                 print("错误：未配置打印机")
                 return False
@@ -316,92 +426,114 @@ class ZebraPrinter:
             print(f"错误：不支持的系统 {self.system}")
             return False
     
-    def _print_network(self, zpl_code):
-        """网络打印（所有平台通用）"""
+    def _print_network_bytes(self, data: bytes):
+        """网络打印（bytes）"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             sock.connect((self.printer_ip, self.printer_port))
-            sock.sendall(zpl_code.encode('utf-8'))
+            sock.sendall(data)
             sock.close()
             print(f"[OK] 网络打印成功: {self.printer_ip}:{self.printer_port}")
             return True
         except Exception as e:
             print(f"[ERROR] 网络打印失败: {e}")
             return False
-    
-    def _print_windows(self, zpl_code):
-        """Windows打印"""
+
+    def _print_windows_bytes(self, data: bytes):
+        """Windows 打印（bytes，自动处理 ZPL/TSPL）"""
         try:
             import win32print
-            
+
             if not self.printer_name:
                 print("错误：未指定Windows打印机")
                 return False
-            
+
             printer_handle = win32print.OpenPrinter(self.printer_name)
-            job_info = ("Label Print", None, "RAW")
+
+            # ── ZPL 模式：发送 SGD 命令初始化（Zebra 和 TSC/Deli 固件均支持）──
+            if self.printer_language == 'zpl':
+                try:
+                    init_cmd = b'! U1 setvar "device.languages" "zpl"\r\n'
+                    win32print.StartDocPrinter(printer_handle, 1, ("Init", None, "RAW"))
+                    win32print.StartPagePrinter(printer_handle)
+                    win32print.WritePrinter(printer_handle, init_cmd)
+                    win32print.EndPagePrinter(printer_handle)
+                    win32print.EndDocPrinter(printer_handle)
+                    print("[ZPL] 已发送 SGD 初始化命令 (切换至 ZPL 模式)")
+                except Exception:
+                    pass  # 初始化失败不影响后续打印
+
+            # ── 发送标签数据 ──
+            lang = self.printer_language.upper()
+            job_info = (f"Label Print ({lang})", None, "RAW")
             win32print.StartDocPrinter(printer_handle, 1, job_info)
             win32print.StartPagePrinter(printer_handle)
-            # 使用 bytes 类型发送，确保编码正确
-            zpl_bytes = zpl_code.encode('utf-8')
-            win32print.WritePrinter(printer_handle, zpl_bytes)
+            win32print.WritePrinter(printer_handle, data)
             win32print.EndPagePrinter(printer_handle)
             win32print.EndDocPrinter(printer_handle)
             win32print.ClosePrinter(printer_handle)
-            
-            print(f"[OK] Windows打印成功: {self.printer_name}")
+
+            print(f"[OK] Windows打印成功 ({lang}): {self.printer_name}")
             return True
-            
+
         except ImportError:
             print("错误：Windows需要安装 pywin32: pip install pywin32")
             return False
         except Exception as e:
             print(f"[ERROR] Windows打印失败: {e}")
             return False
-    
-    def _print_cups(self, zpl_code):
-        """CUPS打印（Linux）"""
+
+    def _print_cups_bytes(self, data: bytes):
+        """CUPS打印（bytes）"""
         try:
             import cups
             import tempfile
-            
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.zpl', delete=False) as f:
-                f.write(zpl_code)
+
+            suffix = '.tspl' if self.printer_language == 'tspl' else '.zpl'
+            with tempfile.NamedTemporaryFile(mode='wb', suffix=suffix, delete=False) as f:
+                f.write(data)
                 temp_file = f.name
-            
-            # 通过CUPS打印
+
             conn = cups.Connection()
             conn.printFile(self.printer_name, temp_file, "Label Print", {})
-            
-            # 删除临时文件
             os.remove(temp_file)
-            
+
             print(f"[OK] CUPS打印成功: {self.printer_name}")
             return True
-            
+
         except ImportError:
             print("提示：Linux建议安装 pycups: pip install pycups")
             return False
         except Exception as e:
             print(f"[ERROR] CUPS打印失败: {e}")
             return False
-    
-    def _print_device(self, zpl_code):
-        """直接写入设备（Linux）"""
+
+    def _print_device_bytes(self, data: bytes):
+        """直接写入设备（bytes）"""
         try:
             with open(self.device_path, 'wb') as device:
-                device.write(zpl_code.encode('utf-8'))
-            
+                device.write(data)
             print(f"[OK] 设备打印成功: {self.device_path}")
             return True
-            
         except PermissionError:
             print(f"[ERROR] 权限不足: {self.device_path}")
-            print(f"提示：请运行 sudo chmod 666 {self.device_path}")
             return False
         except Exception as e:
             print(f"[ERROR] 设备打印失败: {e}")
             return False
+
+    # ── 兼容旧接口（字符串版本） ──
+
+    def _print_network(self, zpl_code):
+        return self._print_network_bytes(zpl_code.encode('utf-8'))
+
+    def _print_windows(self, zpl_code):
+        return self._print_windows_bytes(zpl_code.encode('utf-8'))
+
+    def _print_cups(self, zpl_code):
+        return self._print_cups_bytes(zpl_code.encode('utf-8'))
+
+    def _print_device(self, zpl_code):
+        return self._print_device_bytes(zpl_code.encode('utf-8'))
 

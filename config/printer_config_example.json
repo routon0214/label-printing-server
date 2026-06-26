@@ -38,8 +38,19 @@
       "ip": null,
       "port": 9100,
       "device": null,
+      "language": "zpl",
       "default": true,
-      "_comment": "斑马标签打印机 - 处理ZPL标签（ZPL换行符处理已根据系统架构自动检测）"
+      "_comment": "斑马标签打印机 - 处理ZPL标签"
+    },
+    {
+      "name": "Deli DL-825T",
+      "types": ["label"],
+      "ip": null,
+      "port": 9100,
+      "device": null,
+      "language": "zpl",
+      "default": false,
+      "_comment": "得力标签打印机 - 支持ZPL直通模式"
     },
     {
       "name": "HP LaserJet",
@@ -65,6 +76,7 @@
     "ip": "网络打印机IP地址",
     "port": "网络打印端口（默认9100）",
     "device": "Linux设备路径（如/dev/usb/lp0）",
+    "language": "打印机语言: zpl(直通) | tspl(自动转换ZPL→TSPL) | null=自动检测",
     "default": "是否为默认打印机（找不到匹配时使用）"
   },
   "_examples": {

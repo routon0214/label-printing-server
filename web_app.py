@@ -558,7 +558,8 @@ def get_printer_instance(print_type, printer_config=None):
                 printer_name=printer_config.get('name'),
                 printer_ip=printer_config.get('ip'),
                 printer_port=printer_config.get('port', 9100),
-                device_path=printer_config.get('device')
+                device_path=printer_config.get('device'),
+                printer_language=printer_config.get('language', None)
             )
         elif print_type == 'pdf':
             return PDFPrinter(printer_name=printer_config.get('name'))
@@ -580,7 +581,8 @@ def get_printer_instance(print_type, printer_config=None):
                     printer_name=printer_cfg.get('name'),
                     printer_ip=printer_cfg.get('ip'),
                     printer_port=printer_cfg.get('port', 9100),
-                    device_path=printer_cfg.get('device')
+                    device_path=printer_cfg.get('device'),
+                    printer_language=printer_cfg.get('language', None)
                 )
             elif print_type == 'pdf':
                 return PDFPrinter(printer_name=printer_cfg.get('name'))
@@ -601,7 +603,8 @@ def get_printer_instance(print_type, printer_config=None):
                     printer_name=printer_cfg.get('name'),
                     printer_ip=printer_cfg.get('ip'),
                     printer_port=printer_cfg.get('port', 9100),
-                    device_path=printer_cfg.get('device')
+                    device_path=printer_cfg.get('device'),
+                    printer_language=printer_cfg.get('language', None)
                 )
             elif print_type == 'pdf':
                 return PDFPrinter(printer_name=printer_cfg.get('name'))
@@ -620,7 +623,8 @@ def get_printer_instance(print_type, printer_config=None):
             printer_name=printer_config.get('name'),
             printer_ip=printer_config.get('ip'),
             printer_port=printer_config.get('port', 9100),
-            device_path=printer_config.get('device')
+            device_path=printer_config.get('device'),
+            printer_language=printer_config.get('language', None)
         )
     elif print_type == 'pdf':
         return PDFPrinter(printer_name=printer_config.get('name'))
@@ -753,9 +757,10 @@ async def print_file(
                 )
             
             # 自动检测并转换ZPL中的中文
-            zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
-            if was_converted:
-                print("  [OK] ZPL中文已自动转换为图像")
+            # ⚠️ 已禁用：中文转换留给 agent 端 TSPL 转换器处理
+            # zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+            # if was_converted:
+            #     print("  [OK] ZPL中文已自动转换为图像")
             
             # 调试：保存实际发送的ZPL代码
             debug_file = f"data/debug_web_upload_{filename}"
@@ -1086,6 +1091,10 @@ async def print_wps(request: Request):
             for f in fields:
                 key = f.get('label', '')
                 val = str(f.get('value', ''))
+                # 防御：检测 JavaScript [object Object] 污染
+                if val == '[object Object]':
+                    print(f"[WARN] 字段 '{key}' 的值是 [object Object]！WPS端可能传了对象类型（超链接/附件/图片），请检查AirScript")
+                    val = ''  # 清空，避免二维码/文本变成垃圾
                 if key:
                     variables[key] = val
             if barcode:
@@ -1109,9 +1118,10 @@ async def print_wps(request: Request):
             zpl_code = zpl_generator.generate_label_zpl(label_data)
         
         # 自动检测并转换中文
-        zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
-        if was_converted:
-            print("  [OK] ZPL中文已自动转换为图像")
+        # ⚠️ 已禁用：中文转换留给 agent 端 TSPL 转换器处理
+        # zpl_code, was_converted = detect_and_convert_zpl(zpl_code)
+        # if was_converted:
+        #     print("  [OK] ZPL中文已自动转换为图像")
         
         # 生成任务 ID 并保存到待打印队列
         import uuid
